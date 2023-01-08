@@ -57,12 +57,61 @@ class Model(nn.Module):
     def __init__(self):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.attention = Attention()
+        self.linear_1 = nn.Linear(embedding_dim, embedding_dim) 
+        self.layer_norm_1 = LayerNormalization()       
+        self.linear_2 = nn.Linear(embedding_dim, embedding_dim * 4)
+        self.relu = nn.ReLU()
+        self.linear_3 = nn.Linear(embedding_dim * 4, embedding_dim)
+        self.layer_norm_2 = LayerNormalization() 
 
     def forward(self, x):
+        # Task 1: create embedding lookup table 
         token_embeddings = self.embedding(x)     # x = (batch_size, seq_length) & (batch_size, seq_length, embedding_dim)  (2, 16, 128)
-        attention_result = Attention()
-        output = attention_result(token_embeddings)
-        return output  
+
+        # Task 2: apply attention
+        attention_output = self.attention(token_embeddings)
+
+        # Task 3: add linear layer
+        linear_layer_1 = self.linear_1(attention_output)
+
+        # Task 4: add skip conn.
+        residual_output_1 = linear_layer_1 + token_embeddings         # shape = 2 * 16 * 128
+        
+        # Task 5: apply first layer norm 
+        layer_norm_output_1 = self.layer_norm_1(residual_output_1)      # shape = 2 * 16 * 128
+
+        # Task 6: apply second linear layer
+        linear_layer_2 = self.linear_2(layer_norm_output_1)           # shape = 2 * 16 * 512
+
+        # Task 7: Apply Relu
+        relu_output = self.relu(linear_layer_2)                    # shape = 2 * 16 * 512
+
+        # Task 8: apply third linear layer
+        linear_layer_3 = self.linear_3(relu_output)                  # shape = 2 * 16 * 128
+
+        # Task 9: add skip conn.
+        residual_output_2 = linear_layer_3 + layer_norm_output_1        # shape = 2 * 16 * 128
+
+        # Task 10: apply second layer norm 
+        layer_norm_output_2 = self.layer_norm_2(residual_output_2)      # shape = 2 * 16 * 128
+
+        return layer_norm_output_2 
+
+class LayerNormalization(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # self.mean = 0
+        # self.variance = 0
+
+    def forward(self, x):
+        mean = torch.mean(x, dim=2)
+        mean = torch.unsqueeze(mean, 2)
+        variance= torch.var(x, dim=2)
+        variance = torch.unsqueeze(variance, 2)
+        layer_norm = (x - mean) / variance
+        return layer_norm
+
 
 my_model = Model()
 my_model(token_input_ids)
