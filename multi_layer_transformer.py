@@ -116,10 +116,13 @@ class Transformer_layer(nn.Module):
         
         attention_output = self.attention(input_embeddings, token_attention_masks)
         linear_layer_1 = self.linear_1(attention_output)
+
         residual_output_1 = linear_layer_1 + input_embeddings         # shape = 2 * 16 * 128
         layer_norm_output_1 = self.layer_norm_1(residual_output_1)      # shape = 2 * 16 * 128
+
         linear_layer_2 = self.linear_2(layer_norm_output_1)           # shape = 2 * 16 * 512
         relu_output = self.relu(linear_layer_2)                    # shape = 2 * 16 * 512
+        
         linear_layer_3 = self.linear_3(relu_output)                  # shape = 2 * 16 * 128
         residual_output_2 = linear_layer_3 + layer_norm_output_1        # shape = 2 * 16 * 128
         layer_norm_output_2 = self.layer_norm_2(residual_output_2)      # shape = 2 * 16 * 128
@@ -135,9 +138,10 @@ class Model(nn.Module):
          
     def forward(self, token_input_ids, token_attention_masks, num_layers):
         input_embeddings = self.input_embed(token_input_ids)
-        for layer in num_layers:
 
-        transformer_layer = self.transformer_layer(input_embeddings, token_attention_masks)
+        for layer in num_layers:
+            transformer_layer = self.transformer_layer(input_embeddings, token_attention_masks)
+            input_embeddings = transformer_layer
 
         return transformer_layer
 
