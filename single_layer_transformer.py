@@ -20,6 +20,7 @@ token_input_ids = torch.LongTensor(tokenized["input_ids"])
 batch_size = len(contexts)
 embedding_dim = 128
 seq_length = len(token_input_ids[0])          # 16 after padding for this examples 
+max_seq_length  = 512
 
 
 class Attention(nn.Module):
@@ -53,10 +54,37 @@ class Attention(nn.Module):
 
         return attention_output
 
+
+class LayerNormalization(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # self.mean = 0
+        # self.variance = 0
+
+    def forward(self, x):
+        mean = torch.mean(x, dim=2)
+        mean = torch.unsqueeze(mean, 2)
+        variance= torch.var(x, dim=2)
+        variance = torch.unsqueeze(variance, 2)
+        layer_norm = (x - mean) / variance
+        return layer_norm
+
+class Positional_embed(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.posit_embed_init = torch.arange(0, seq_length)
+        self.posit_embedding = nn.Embedding(max_seq_length, embedding_dim)
+        
+    def forward(self): 
+        positional_embeddings = self.posit_embedding(self.posit_embed_init).unsqueeze(0)
+        return positional_embeddings       # shape = 1 * 16 * 128
+
+
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.posit_embed = Positional_embed()
         self.attention = Attention()
         self.linear_1 = nn.Linear(embedding_dim, embedding_dim) 
         self.layer_norm_1 = LayerNormalization()       
@@ -68,6 +96,8 @@ class Model(nn.Module):
     def forward(self, x):
         # Task 1: create embedding lookup table 
         token_embeddings = self.embedding(x)     # x = (batch_size, seq_length) & (batch_size, seq_length, embedding_dim)  (2, 16, 128)
+        position_embeddings = self.posit_embed()
+        token_embeddings = token_embeddings + position_embeddings
 
         # Task 2: apply attention
         attention_output = self.attention(token_embeddings)
@@ -98,19 +128,6 @@ class Model(nn.Module):
 
         return layer_norm_output_2 
 
-class LayerNormalization(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # self.mean = 0
-        # self.variance = 0
-
-    def forward(self, x):
-        mean = torch.mean(x, dim=2)
-        mean = torch.unsqueeze(mean, 2)
-        variance= torch.var(x, dim=2)
-        variance = torch.unsqueeze(variance, 2)
-        layer_norm = (x - mean) / variance
-        return layer_norm
 
 
 my_model = Model()
