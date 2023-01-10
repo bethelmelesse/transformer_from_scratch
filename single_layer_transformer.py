@@ -14,9 +14,11 @@ tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 vocab_size = tokenizer.vocab_size
 
 tokenized = tokenizer(contexts, padding=True)
-print(tokenized)
+# print(tokenized)
 
 token_input_ids = torch.LongTensor(tokenized["input_ids"])
+token_attention_masks = torch.LongTensor(tokenized["attention_mask"])
+
 batch_size = len(contexts)
 embedding_dim = 128
 seq_length = len(token_input_ids[0])          # 16 after padding for this examples 
@@ -32,7 +34,7 @@ class Attention(nn.Module):
         self.w_value = torch.rand(embedding_dim, embedding_dim)
         self.softmax = nn.Softmax(dim=2)
     
-    def forward(self, x):                        # x = 2, 16, 128
+    def forward(self, x, token_attention_masks):                        # x = 2, 16, 128
         # task 2: get query, key, value
         query = torch.matmul(x, self.w_query)    # shape of q, k, v = 2 * 16 * 256
         key = torch.matmul(x, self.w_key)          
@@ -44,7 +46,14 @@ class Attention(nn.Module):
         # task 4: scale by root dk - dimensiion of key
         dk = key.size(dim=2)
         root_dk = math.sqrt(dk)
-        scale = product / root_dk      # attention score 
+        scale = product / root_dk      # attention score            # shape = 2 * 16 * 16
+
+        # task 4.1: 
+        new_attention_mask = token_attention_masks.clone()
+        new_attention_mask[new_attention_mask == 0] = -1000        # shape = 2 * 16
+        new_attention_mask[new_attention_mask == 1] = 0
+        new_attention_mask = new_attention_mask.unsqueeze(1)
+        new_scale = scale + new_attention_mask
 
         # task 5: softmax
         attention_probability = self.softmax(scale)      # shape of attention prob = 2 * 16 * 16
@@ -93,14 +102,14 @@ class Model(nn.Module):
         self.linear_3 = nn.Linear(embedding_dim * 4, embedding_dim)
         self.layer_norm_2 = LayerNormalization() 
 
-    def forward(self, x):
+    def forward(self, x, token_attention_masks):
         # Task 1: create embedding lookup table 
         token_embeddings = self.embedding(x)     # x = (batch_size, seq_length) & (batch_size, seq_length, embedding_dim)  (2, 16, 128)
         position_embeddings = self.posit_embed()
         token_embeddings = token_embeddings + position_embeddings
 
         # Task 2: apply attention
-        attention_output = self.attention(token_embeddings)
+        attention_output = self.attention(token_embeddings, token_attention_masks)
 
         # Task 3: add linear layer
         linear_layer_1 = self.linear_1(attention_output)
@@ -131,6 +140,6 @@ class Model(nn.Module):
 
 
 my_model = Model()
-my_model(token_input_ids)
+my_model(token_input_ids, token_attention_masks)
 
 print()
