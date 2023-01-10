@@ -1,6 +1,1 @@
-1. Also pass the tokenized attention mask as input to the model. Use this to mask attention_scores before the softmax (that is, have zero attention probability for padding tokens)
-
-
-3. You current model just has one layer. Use a for loop, to make 6 transformer layers. One way to do so, is to make another nn.module, which has as elements these 6 layers.
-
-Change it into 8 heads. You will use a for loop, only over the heads.
+Do multi head. No for loops, lots of views and reshapes and concat/stack

@@ -122,7 +122,7 @@ class Transformer_layer(nn.Module):
 
         linear_layer_2 = self.linear_2(layer_norm_output_1)           # shape = 2 * 16 * 512
         relu_output = self.relu(linear_layer_2)                    # shape = 2 * 16 * 512
-        
+
         linear_layer_3 = self.linear_3(relu_output)                  # shape = 2 * 16 * 128
         residual_output_2 = linear_layer_3 + layer_norm_output_1        # shape = 2 * 16 * 128
         layer_norm_output_2 = self.layer_norm_2(residual_output_2)      # shape = 2 * 16 * 128
@@ -131,25 +131,28 @@ class Transformer_layer(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self):
+    def __init__(self, num_layers):
         super().__init__()
         self.input_embed= Input_embedding()
-        self.transformer_layer = Transformer_layer()
+        self.layers = []
+        self.num_layers = num_layers
+        for n in range(num_layers):
+            self.layers.append(Transformer_layer())
+  
          
-    def forward(self, token_input_ids, token_attention_masks, num_layers):
+    def forward(self, token_input_ids, token_attention_masks):
         input_embeddings = self.input_embed(token_input_ids)
 
-        for layer in num_layers:
-            transformer_layer = self.transformer_layer(input_embeddings, token_attention_masks)
-            input_embeddings = transformer_layer
+        for n in range(self.num_layers):
+            layer_output = self.layers[n](input_embeddings, token_attention_masks)
+            input_embeddings = layer_output
 
-        return transformer_layer
+        return layer_output
 
 
-
-my_model = Model()
 num_layers = 6
-a = my_model(token_input_ids, token_attention_masks, num_layers)
+my_model = Model(num_layers)
+a = my_model(token_input_ids, token_attention_masks)
 
 print(a)
 print(a.shape)
