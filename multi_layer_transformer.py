@@ -67,8 +67,6 @@ class Attention(nn.Module):
 class LayerNormalization(nn.Module):
     def __init__(self):
         super().__init__()
-        # self.mean = 0
-        # self.variance = 0
 
     def forward(self, x):
         mean = torch.mean(x, dim=2)

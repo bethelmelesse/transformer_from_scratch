@@ -122,9 +122,7 @@ class Attention(nn.Module):
             product_heads = torch.bmm(attention_probability_heads[i], new_value[i])
             attention_output_heads.append(product_heads)
 
-        attention_output = torch.concat((attention_output_heads[0], attention_output_heads[1]), -1)
-        for i in range(num_heads - 2):
-            attention_output = torch.concat((attention_output, attention_output_heads[1 + i]), -1)                        # shape = ([18, 16, 16])
+        attention_output = torch.concat(attention_output_heads, dim=-1)                     # shape = ([2, 16, 128])
            
         final_attention_output = self.linear_after_conc(attention_output)
 
