@@ -56,7 +56,7 @@ class Attention(nn.Module):
         new_scale = scale + new_attention_mask
 
         # task 5: softmax
-        attention_probability = self.softmax(scale)      # shape of attention prob = 2 * 16 * 16
+        attention_probability = self.softmax(new_scale)      # shape of attention prob = 2 * 16 * 16
 
         # task 6: multiply attention prob by value and sum
         attention_output = torch.bmm(attention_probability, value)
