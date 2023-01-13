@@ -145,10 +145,7 @@ class Transformer_layer(nn.Module):
     def __init__(self, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        self.attention = []
-        for _ in range(num_layers):
-            self.attention.append(Attention())
-
+        self.attention = Attention()
         self.linear_1 = nn.Linear(embedding_dim, embedding_dim) 
         self.layer_norm_1 = LayerNormalization()       
         self.linear_2 = nn.Linear(embedding_dim, embedding_dim * 4)
@@ -158,20 +155,19 @@ class Transformer_layer(nn.Module):
 
     def forward(self, input_embeddings, token_attention_masks):
         
-        for n in range(self.num_layers):
-            attention_output = self.attention[n](input_embeddings, token_attention_masks)
-        
-            linear_layer_1 = self.linear_1(attention_output)
+        attention_output = self.attention(input_embeddings, token_attention_masks)
+    
+        linear_layer_1 = self.linear_1(attention_output)
 
-            residual_output_1 = linear_layer_1 + input_embeddings         # shape = 2 * 16 * 128
-            layer_norm_output_1 = self.layer_norm_1(residual_output_1)      # shape = 2 * 16 * 128
+        residual_output_1 = linear_layer_1 + input_embeddings         # shape = 2 * 16 * 128
+        layer_norm_output_1 = self.layer_norm_1(residual_output_1)      # shape = 2 * 16 * 128
 
-            linear_layer_2 = self.linear_2(layer_norm_output_1)           # shape = 2 * 16 * 512
-            relu_output = self.relu(linear_layer_2)                    # shape = 2 * 16 * 512
+        linear_layer_2 = self.linear_2(layer_norm_output_1)           # shape = 2 * 16 * 512
+        relu_output = self.relu(linear_layer_2)                    # shape = 2 * 16 * 512
 
-            linear_layer_3 = self.linear_3(relu_output)                  # shape = 2 * 16 * 128
-            residual_output_2 = linear_layer_3 + layer_norm_output_1        # shape = 2 * 16 * 128
-            layer_norm_output_2 = self.layer_norm_2(residual_output_2)      # shape = 2 * 16 * 128
+        linear_layer_3 = self.linear_3(relu_output)                  # shape = 2 * 16 * 128
+        residual_output_2 = linear_layer_3 + layer_norm_output_1        # shape = 2 * 16 * 128
+        layer_norm_output_2 = self.layer_norm_2(residual_output_2)      # shape = 2 * 16 * 128
 
         return layer_norm_output_2 
 
