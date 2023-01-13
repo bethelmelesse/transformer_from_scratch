@@ -96,13 +96,12 @@ class Attention(nn.Module):
         prob_by_value_and_sum = torch.bmm(attention_probabilty_across_heads, new_value)                                       # shape = 16, 16, 16
         prob_by_value_and_sum = torch.reshape(prob_by_value_and_sum, (batch_size, num_heads, seq_length, head_dim))           # shape = 2, 8, 16, 16
 
-        # reorder 
+        # task 9: reorder 
         attention_output = torch.transpose(prob_by_value_and_sum , 1, 2)                                             # shape = 2, 16, 8, 16
         attention_output = torch.transpose(attention_output, 2, 3)                                                   # shape = 2, 16, 16, 8
         attention_output = torch.reshape(attention_output, (batch_size, seq_length, head_dim * num_heads))           # shape = 2, 16, 128
       
-        # concat heads
-               
+        # task 10: apply linear               
         final_attention_output = self.linear_after_attention(attention_output)                                        # shape = 2, 16, 128 
 
         return final_attention_output
