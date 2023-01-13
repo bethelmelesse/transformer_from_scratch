@@ -1,1 +1,9 @@
+for i in range(self.num_heads):                              # shape = 8 * [2 * 16 * 16]
+2 * 16 * 128 ->  2 * 16 * 16 * 8
+Transpose to 2 * 8 * 16 * 16
+
+2 * 8 * 16 * 16 -> 16 * 16 * 16
+
+Then opposite of these
+
 Do multi head. No for loops, lots of views and reshapes and concat/stack
