@@ -46,9 +46,6 @@ class Attention(nn.Module):
         self.num_heads = 8
 
         self.softmax = nn.Softmax(dim=2)
-
-        self.linear_after_conc = nn.Linear(embedding_dim, embedding_dim)
-
     
     def forward(self, input_embeddings, token_attention_masks):                        # x = 2, 16, 128
         # task 2: get query, key, value
@@ -123,10 +120,8 @@ class Attention(nn.Module):
             attention_output_heads.append(product_heads)
 
         attention_output = torch.concat(attention_output_heads, dim=-1)                     # shape = ([2, 16, 128])
-           
-        final_attention_output = self.linear_after_conc(attention_output)
 
-        return final_attention_output
+        return attention_output
 
 
 class LayerNormalization(nn.Module):

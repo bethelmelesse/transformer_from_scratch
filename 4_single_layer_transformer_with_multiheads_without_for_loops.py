@@ -35,7 +35,6 @@ class Attention(nn.Module):
 
         self.num_heads = 8
         self.softmax = nn.Softmax(dim=2)
-        self.linear_after_attention = nn.Linear(embedding_dim, embedding_dim)
 
     
     def forward(self, input_embeddings, token_attention_masks):                        # x = 2, 16, 128
@@ -68,8 +67,6 @@ class Attention(nn.Module):
         new_value = torch.transpose(new_value, 2, 3)                                                 # shape = 2, 16, 8, 16
         new_value = torch.transpose(new_value, 1, 2)                                                 # shape = 2, 8, 16, 16 
         new_value = torch.reshape(new_value, (batch_size * num_heads, seq_length, head_dim))         # shape = 16, 16, 16
-  
-
 
         # task 4: multiply query by key
         product_across_heads = torch.bmm(new_query, new_key.transpose(1, 2))                        # shape = 16, 16, 16
@@ -101,10 +98,7 @@ class Attention(nn.Module):
         attention_output = torch.transpose(attention_output, 2, 3)                                                   # shape = 2, 16, 16, 8
         attention_output = torch.reshape(attention_output, (batch_size, seq_length, head_dim * num_heads))           # shape = 2, 16, 128
       
-        # task 10: apply linear               
-        final_attention_output = self.linear_after_attention(attention_output)                                        # shape = 2, 16, 128 
-
-        return final_attention_output
+        return attention_output
 
 
 class LayerNormalization(nn.Module):
