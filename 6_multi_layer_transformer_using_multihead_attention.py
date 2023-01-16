@@ -20,7 +20,7 @@ class Attention_layer(nn.Module):
         self.num_heads = 8
         self.softmax = nn.Softmax(dim=2)
     
-    def forward(self, input_embeddings, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding, masked):      # x = 2, 16, 128
+    def forward(self, input_embeddings, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding, masked):      # x = 2, 16, 128        
         seq_length_source = len(token_attention_masks_source[0])
         seq_length_target = len(token_attention_masks_target[0])
         
@@ -87,9 +87,21 @@ class Attention_layer(nn.Module):
 
             attention_score = scale + encoder_attention_mask                          # encoder = 16, 16, 16
 
-        else:          # for now assume there is no masking 
-            # decoder_attention_mask = token_attention_masks_source.clone()
-            attention_score = scale                                                  # decoder = 16, 19, 19        # cross = 16, 16, 19
+        else:           # for now assume there is no masking 
+            if (encoder_output_embedding == None):
+                # decoder_attention_mask = token_attention_masks_source.clone()
+                attention_score = scale                                                 # decoder = 16, 19, 19        # cross = 16, 16, 19
+        
+            else:
+                seq_length = seq_length_target                  # 19   cross
+                cross_attention_mask = token_attention_masks_target.clone()                                       # shape = 2 * 19
+                cross_attention_mask[cross_attention_mask == 0] = -1000                                            # shape = 2 * 19
+                cross_attention_mask[cross_attention_mask == 1] = 0                                                # shape = 2 * 19
+                cross_attention_mask = cross_attention_mask.unsqueeze(1)                                           # shape = 2 * 1 * 19
+                cross_attention_mask = cross_attention_mask.repeat_interleave(repeats=num_heads, dim=1)           # shape = 2 * 8 * 19
+                cross_attention_mask = cross_attention_mask.reshape(BATCH_SIZE * num_heads, seq_length)           # shape = 16 * 19
+                cross_attention_mask = cross_attention_mask.unsqueeze(2)                                          # shape = 16 * 19 * 1
+                attention_score = scale + cross_attention_mask                          # cross = 16, 16, 16  
 
        
         # task 7: softmax the attention score 
@@ -203,7 +215,7 @@ class Decoder_transformer_layer(nn.Module):
         linear_layer_1 = self.linear_1(masked_self_attention_output)           # decoder = 2 * 19 * 128
         residual_output_1 = linear_layer_1 + input_embeddings_target           # decoder = 2 * 19 * 128
 
-        cross_attention_output = self.cross_attention(residual_output_1, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, masked=True)   # decoder = 2 * 19 * 128
+        cross_attention_output = self.cross_attention(residual_output_1, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, masked = True)   # decoder = 2 * 19 * 128
         linear_layer_2 = self.linear_2(cross_attention_output)            # decoder = 2 * 19 * 128
         residual_output_2 = linear_layer_2 + residual_output_1            # decoder = 2 * 19 * 128
 
