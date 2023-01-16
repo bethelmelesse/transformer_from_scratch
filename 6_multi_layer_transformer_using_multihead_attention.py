@@ -30,36 +30,14 @@ class Attention_layer(nn.Module):
             seq_length = seq_length_target 
 
         num_heads = self.num_heads
-        
-        # task 2: get query, key, value      
-        key = torch.matmul(input_embeddings, self.w_key)          
-        value = torch.matmul(input_embeddings, self.w_value)
-
-         # task 3: split query, key and value into attention heads and reshape 
         head_dim = int(EMBEDDING_DIM / self.num_heads)          # 16
+        
+        # task 2: get query, key, value  
+        query = torch.matmul(input_embeddings, self.w_query)    # shape of q, k, v = 2 * 16 * 128         cross = 2, 19, 128
 
-         # task 3.1: for key
-        new_key = torch.reshape(key, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8    cross = dencoder
-        new_key = torch.transpose(new_key, 2, 3)                                               # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
-        new_key = torch.transpose(new_key, 1, 2)                                               # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16
-        new_key = torch.reshape(new_key, (BATCH_SIZE * num_heads, seq_length,head_dim))        # encoder = 16, 16, 16     decoder = 16, 19, 16
-
-         # task 3.2: for value
-        new_value = torch.reshape(value, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8  cross = dencoder
-        new_value = torch.transpose(new_value, 2, 3)                                          # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
-        new_value = torch.transpose(new_value, 1, 2)                                          # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16
-        new_value = torch.reshape(new_value, (BATCH_SIZE * num_heads, seq_length, head_dim))   # encoder = 16, 16, 16     decoder = 16, 19, 16
-
-        # task 3.3: for query
-
-        if (encoder_output_embedding == None):
-            query = torch.matmul(input_embeddings, self.w_query)    # shape of q, k, v = 2 * 16 * 128
-        else:
-            query = torch.matmul(encoder_output_embedding, self.w_query) 
-            seq_length = seq_length_source                  # 16   cross
-
+        # task 3.1: for query
         # Reshape to Batch, seq_length, head_dim, num_head
-        new_query = torch.reshape(query, (BATCH_SIZE, seq_length, head_dim, num_heads))      # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8    cross = encoder
+        new_query = torch.reshape(query, (BATCH_SIZE, seq_length, head_dim, num_heads))      # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8    cross = decoder
         # swap -->  Batch, seq_length, num_head, head_dim
         new_query = torch.transpose(new_query, 2, 3)                                         # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
         # swap -->  Batch, num_head, seq_length, head_dim
@@ -67,14 +45,36 @@ class Attention_layer(nn.Module):
         # reshape again --->
         new_query = torch.reshape(new_query, (BATCH_SIZE * num_heads, seq_length, head_dim))  # encoder = 16, 16, 16    decoder = 16, 19, 16
 
-       
+        if (encoder_output_embedding == None):
+            key = torch.matmul(input_embeddings, self.w_key)          
+            value = torch.matmul(input_embeddings, self.w_value)
+        else:
+            key = torch.matmul(encoder_output_embedding, self.w_key)          
+            value = torch.matmul(encoder_output_embedding, self.w_value)
+            seq_length = seq_length_source                  # 16   cross
+
+         # task 3: split query, key and value into attention heads and reshape 
+    
+         # task 3.2: for key
+        new_key = torch.reshape(key, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8    cross = encoder
+        new_key = torch.transpose(new_key, 2, 3)                                               # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
+        new_key = torch.transpose(new_key, 1, 2)                                               # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16
+        new_key = torch.reshape(new_key, (BATCH_SIZE * num_heads, seq_length,head_dim))        # encoder = 16, 16, 16     decoder = 16, 19, 16
+
+         # task 3.3: for value
+        new_value = torch.reshape(value, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8  cross = encoder
+        new_value = torch.transpose(new_value, 2, 3)                                          # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
+        new_value = torch.transpose(new_value, 1, 2)                                          # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16
+        new_value = torch.reshape(new_value, (BATCH_SIZE * num_heads, seq_length, head_dim))   # encoder = 16, 16, 16     decoder = 16, 19, 16
+
+              
         # task 4: multiply query by key
-        product_across_heads = torch.bmm(new_query, new_key.transpose(1, 2))             # encoder = 16, 16, 16        decoder = 16, 19, 19    cross = 16, 16, 19
+        product_across_heads = torch.bmm(new_query, new_key.transpose(1, 2))             # encoder = 16, 16, 16        decoder = 16, 19, 19    cross = 16, 19, 16
 
         # task 5: scale the product 
         d_head_dim = new_key.size(dim=2)                                  # encoder = 16        decoder = 16       cross = 16
         root_d_head_dim = math.sqrt(d_head_dim)                            # encoder = 4        decoder = 4        cross = 4
-        scale = product_across_heads / root_d_head_dim      # attention score    # encoder = 16, 16, 16       decoder = 16, 19, 19   # cross = 16, 16, 19
+        scale = product_across_heads / root_d_head_dim      # attention score    # encoder = 16, 16, 16       decoder = 16, 19, 19   # cross = 16, 19, 16
 
         # task 6: include attention mask  for the encoder
         if (masked == False):
@@ -87,22 +87,28 @@ class Attention_layer(nn.Module):
 
             attention_score = scale + encoder_attention_mask                          # encoder = 16, 16, 16
 
-        else:
+        else:          # for now assume there is no masking 
             # decoder_attention_mask = token_attention_masks_source.clone()
             attention_score = scale                                                  # decoder = 16, 19, 19        # cross = 16, 16, 19
 
        
         # task 7: softmax the attention score 
-        attention_probabilty_across_heads = self.softmax(attention_score)            # encoder = 16, 16, 16       decoder = 16, 19, 19    cross = 16, 16, 19
+        attention_probabilty_across_heads = self.softmax(attention_score)            # encoder = 16, 16, 16       decoder = 16, 19, 19    cross = 16, 19, 16
         
         # task 8: multiply attention prob by value and sum
-        prob_by_value_and_sum = torch.bmm(attention_probabilty_across_heads, new_value)   # encoder = 16, 16, 16    decoder = 16, 19, 19    cross = 16, 16, 16
-        prob_by_value_and_sum = torch.reshape(prob_by_value_and_sum, (BATCH_SIZE, num_heads, seq_length, head_dim))     # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16           cross = 2, 8, 16, 16
+        prob_by_value_and_sum = torch.bmm(attention_probabilty_across_heads, new_value)   # encoder = 16, 16, 16    decoder = 16, 19, 19    cross = 16, 19, 16
+
+        if (encoder_output_embedding == None):
+            prob_by_value_and_sum = torch.reshape(prob_by_value_and_sum, (BATCH_SIZE, num_heads, seq_length, head_dim))     # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16           cross = 2, 8, 19, 16
+        else:
+            seq_length = seq_length_target                  # 19   cross
+            prob_by_value_and_sum = torch.reshape(prob_by_value_and_sum, (BATCH_SIZE, num_heads, seq_length, head_dim))               # cross = 2, 8, 19, 16
+        
 
         # task 9: reorder 
-        attention_output = torch.transpose(prob_by_value_and_sum , 1, 2)        # encoder = 2, 16, 8, 16    decoder = 2, 19, 8, 16   cross = 2, 16, 8, 16 
-        attention_output = torch.transpose(attention_output, 2, 3)              # encoder = 2, 16, 16, 8    decoder = 2, 19, 16, 8   cross = 2, 16, 16, 8 
-        attention_output = torch.reshape(attention_output, (BATCH_SIZE, seq_length, head_dim * num_heads))    # encoder = 2, 16, 128   decoder =  2, 19, 128  cross = 2, 16, 128  
+        attention_output = torch.transpose(prob_by_value_and_sum , 1, 2)        # encoder = 2, 16, 8, 16    decoder = 2, 19, 8, 16   cross = 2, 19, 8, 16
+        attention_output = torch.transpose(attention_output, 2, 3)              # encoder = 2, 16, 16, 8    decoder = 2, 19, 16, 8   cross = 2, 19, 16, 8 
+        attention_output = torch.reshape(attention_output, (BATCH_SIZE, seq_length, head_dim * num_heads))    # encoder = 2, 16, 128   decoder =  2, 19, 128  cross = 2, 19, 128 
 
         return attention_output                       
 
@@ -181,15 +187,15 @@ class Decoder_transformer_layer(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         self.masked_self_attention = Attention_layer()                               # step 1 - self-attention - masked self attention ---- make it masked
-        self.linear_1 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM)                     # step 2 - linear
+        self.linear_1 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM)                      # step 2 - linear
 
         self.cross_attention = Attention_layer()                                     # step 3 - self-attention - cross attention --- make it masked
-        self.linear_2 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM * 4)                 # step 4 - linear
+        self.linear_2 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM)                      # step 4 - linear
 
         self.layer_norm = LayerNormalization()                                      # step 5 - layer norm
-        self.linear_3 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM * 4)                 # step 6 - linear
+        self.linear_3 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM)                     # step 6 - linear
         self.relu = nn.ReLU()                                                       # step 7 - relu
-        self.linear_4 = nn.Linear(EMBEDDING_DIM * 4, EMBEDDING_DIM)                 # step 8 - linear
+        self.linear_4 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM)                     # step 8 - linear
 
     def forward(self, input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding):
         
@@ -197,16 +203,15 @@ class Decoder_transformer_layer(nn.Module):
         linear_layer_1 = self.linear_1(masked_self_attention_output)           # decoder = 2 * 19 * 128
         residual_output_1 = linear_layer_1 + input_embeddings_target           # decoder = 2 * 19 * 128
 
-        cross_attention_output = self.cross_attention(input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, masked=True)   # decoder = 2 * 16 * 128
-        linear_layer_2 = self.linear_2(cross_attention_output)            # decoder = 2 * 16 * 512
+        cross_attention_output = self.cross_attention(input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, masked=True)   # decoder = 2 * 19 * 128
+        linear_layer_2 = self.linear_2(cross_attention_output)            # decoder = 2 * 19 * 128
+        residual_output_2 = linear_layer_2 + residual_output_1            # decoder = 2 * 19 * 128
 
-        residual_output_2 = linear_layer_2 + residual_output_1            # shape = 
-
-        layer_norm_output = self.layer_norm(residual_output_2)            # shape = 
-        linear_layer_3 = self.linear_3(layer_norm_output)                 # shape = 
-        relu_output = self.relu(linear_layer_3)                           # shape = 
-        linear_layer_4 = self.linear_4(relu_output)                       # shape = 
-        residual_output_3 = linear_layer_4 + residual_output_2            # shape = 
+        layer_norm_output = self.layer_norm(residual_output_2)            # decoder = 2 * 19 * 128 
+        linear_layer_3 = self.linear_3(layer_norm_output)                 # decoder = 2 * 19 * 128
+        relu_output = self.relu(linear_layer_3)                           # decoder = 2 * 19 * 128
+        linear_layer_4 = self.linear_4(relu_output)                       # shape = 2 * 19 * 128
+        residual_output_3 = linear_layer_4 + residual_output_2            # shape = 2 * 19 * 128
 
         return residual_output_3
 
