@@ -89,8 +89,15 @@ class Attention_layer(nn.Module):
 
         else:           # for now assume there is no masking 
             if (encoder_output_embedding == None):
-                # decoder_attention_mask = token_attention_masks_source.clone()
-                attention_score = scale                                                 # decoder = 16, 19, 19        # cross = 16, 16, 19
+                decoder_attention_mask_1 = token_attention_masks_target.clone()                                    # cross = 2 * 19
+                decoder_attention_mask_1 = decoder_attention_mask_1.unsqueeze(1)                                           # shape = 2 * 1 * 19
+                decoder_attention_mask_1 = decoder_attention_mask_1.repeat_interleave(repeats=seq_length, dim=1)           # shape = 2 * 19 * 19
+
+                decoder_attention_mask_2 = torch.ones_like(decoder_attention_mask_1) * (-1000)
+                decoder_attention_mask_2 = torch.triu(decoder_attention_mask_2, diagonal=1)                           # masked = 2, 19, 19
+
+                decoder_attention_mask = decoder_attention_mask.repeat_interleave(repeats=num_heads, dim=0)           # shape = 16 * 19 * 19
+                attention_score = scale + decoder_attention_mask                                                      # decoder = 16, 19, 19  
         
             else:
                 seq_length = seq_length_target                  # 19   cross
