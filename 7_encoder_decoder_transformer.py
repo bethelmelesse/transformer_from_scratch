@@ -265,9 +265,26 @@ class Model(nn.Module):
             decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output)
             input_embeddings_target = decoder_output
 
+
         return decoder_output
 
-''' ----------------------------------------------------------Other-------------------------------------------------------------------------------------'''
+''' ----------------------------------------------------------Training----------------------------------------------------------------------------------'''
+# class Model_2(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+
+#     def forward(self, x):
+
+# loss = nn.CrossEntropyLoss()
+# optimizer = torch.optim.Adam()
+    
+# def train():
+#     optimizer.zero_grad()  
+#     predict_y = model
+#     loss = 
+
+
+''' ----------------------------------------------------------Testing-----------------------------------------------------------------------------------'''
 
 ''' -----------------------------------------------------------test-------------------------------------------------------------------------------------'''
 def main():
@@ -306,11 +323,10 @@ def main():
 
     num_layers = 6
     my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target)
-    a = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target)
+    model = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target)
 
-    print(a)
-    print(a.shape)
-
+    # seq_length_target = len(token_input_ids_target[0])
+   
     print()
 
 if __name__ == "__main__":
