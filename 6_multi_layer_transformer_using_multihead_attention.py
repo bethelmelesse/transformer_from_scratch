@@ -96,7 +96,7 @@ class Attention_layer(nn.Module):
                 decoder_attention_mask_2 = torch.ones_like(decoder_attention_mask_1) * (-1000)
                 decoder_attention_mask_2 = torch.triu(decoder_attention_mask_2, diagonal=1)                           # masked = 2, 19, 19
 
-                decoder_attention_mask = decoder_attention_mask.repeat_interleave(repeats=num_heads, dim=0)           # shape = 16 * 19 * 19
+                decoder_attention_mask = decoder_attention_mask_2.repeat_interleave(repeats=num_heads, dim=0)           # shape = 16 * 19 * 19
                 attention_score = scale + decoder_attention_mask                                                      # decoder = 16, 19, 19  
         
             else:
