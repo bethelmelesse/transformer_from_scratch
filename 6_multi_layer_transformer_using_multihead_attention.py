@@ -203,7 +203,7 @@ class Decoder_transformer_layer(nn.Module):
         linear_layer_1 = self.linear_1(masked_self_attention_output)           # decoder = 2 * 19 * 128
         residual_output_1 = linear_layer_1 + input_embeddings_target           # decoder = 2 * 19 * 128
 
-        cross_attention_output = self.cross_attention(input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, masked=True)   # decoder = 2 * 19 * 128
+        cross_attention_output = self.cross_attention(residual_output_1, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, masked=True)   # decoder = 2 * 19 * 128
         linear_layer_2 = self.linear_2(cross_attention_output)            # decoder = 2 * 19 * 128
         residual_output_2 = linear_layer_2 + residual_output_1            # decoder = 2 * 19 * 128
 
@@ -246,7 +246,7 @@ class Model(nn.Module):
             decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output)
             input_embeddings_target = decoder_output
 
-        return encoder_output
+        return decoder_output
 
 ''' ----------------------------------------------------------Other-------------------------------------------------------------------------------------'''
 
