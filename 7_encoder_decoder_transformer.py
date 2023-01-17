@@ -2,6 +2,7 @@ from transformers import BertTokenizer, AutoTokenizer
 import torch
 import torch.nn as nn
 import math
+from tqdm import tqdm
 
 # common
 BATCH_SIZE = 2
@@ -29,63 +30,63 @@ class Attention_layer(nn.Module):
         head_dim = int(EMBEDDING_DIM / self.num_heads)          # 16
 
         def query(embeddings, seq_length):  
-            query = torch.matmul(embeddings, self.w_query)    # shape of q, k, v = 2 * 16 * 128         cross = 2, 19, 128
-            new_query = torch.reshape(query, (BATCH_SIZE, seq_length, head_dim, num_heads))      # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8    cross = decoder
-            new_query = torch.transpose(new_query, 2, 3)                                         # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
-            new_query = torch.transpose(new_query, 1, 2)                                         # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16
-            new_query = torch.reshape(new_query, (BATCH_SIZE * num_heads, seq_length, head_dim))  # encoder = 16, 16, 16    decoder = 16, 19, 16
+            query = torch.matmul(embeddings, self.w_query)    # shape of q, k, v = 2 * 16 * 128         cross = 2, 18, 128
+            new_query = torch.reshape(query, (BATCH_SIZE, seq_length, head_dim, num_heads))      # encoder = 2, 16, 16, 8   decoder = 2, 18, 16, 8    cross = decoder
+            new_query = torch.transpose(new_query, 2, 3)                                         # encoder = 2, 16, 8, 16   decoder = 2, 18, 8, 16
+            new_query = torch.transpose(new_query, 1, 2)                                         # encoder = 2, 8, 16, 16   decoder = 2, 8, 18, 16
+            new_query = torch.reshape(new_query, (BATCH_SIZE * num_heads, seq_length, head_dim))  # encoder = 16, 16, 16    decoder = 16, 18, 16
             return new_query
 
         def key(embeddings, seq_length):
             key = torch.matmul(embeddings, self.w_key)
-            new_key = torch.reshape(key, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8    cross = encoder
-            new_key = torch.transpose(new_key, 2, 3)                                               # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
-            new_key = torch.transpose(new_key, 1, 2)                                               # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16
-            new_key = torch.reshape(new_key, (BATCH_SIZE * num_heads, seq_length,head_dim))        # encoder = 16, 16, 16     decoder = 16, 19, 16
+            new_key = torch.reshape(key, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 18, 16, 8    cross = encoder
+            new_key = torch.transpose(new_key, 2, 3)                                               # encoder = 2, 16, 8, 16   decoder = 2, 18, 8, 16
+            new_key = torch.transpose(new_key, 1, 2)                                               # encoder = 2, 8, 16, 16   decoder = 2, 8, 18, 16
+            new_key = torch.reshape(new_key, (BATCH_SIZE * num_heads, seq_length,head_dim))        # encoder = 16, 16, 16     decoder = 16, 18, 16
             return new_key
 
 
         def value(embeddings, seq_length):
             value = torch.matmul(embeddings, self.w_value)
-            new_value = torch.reshape(value, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 19, 16, 8  cross = encoder
-            new_value = torch.transpose(new_value, 2, 3)                                          # encoder = 2, 16, 8, 16   decoder = 2, 19, 8, 16
-            new_value = torch.transpose(new_value, 1, 2)                                          # encoder = 2, 8, 16, 16   decoder = 2, 8, 19, 16
-            new_value = torch.reshape(new_value, (BATCH_SIZE * num_heads, seq_length, head_dim))   # encoder = 16, 16, 16     decoder = 16, 19, 16
+            new_value = torch.reshape(value, (BATCH_SIZE, seq_length, head_dim, num_heads))       # encoder = 2, 16, 16, 8   decoder = 2, 18, 16, 8  cross = encoder
+            new_value = torch.transpose(new_value, 2, 3)                                          # encoder = 2, 16, 8, 16   decoder = 2, 18, 8, 16
+            new_value = torch.transpose(new_value, 1, 2)                                          # encoder = 2, 8, 16, 16   decoder = 2, 8, 18, 16
+            new_value = torch.reshape(new_value, (BATCH_SIZE * num_heads, seq_length, head_dim))   # encoder = 16, 16, 16     decoder = 16, 18, 16
             return new_value 
 
         def scaled_product(query, key):
-            product_across_heads = torch.bmm(query, key.transpose(1, 2))             # encoder = 16, 16, 16        decoder = 16, 19, 19    cross = 16, 19, 16
+            product_across_heads = torch.bmm(query, key.transpose(1, 2))             # encoder = 16, 16, 16        decoder = 16, 18, 18    cross = 16, 18, 16
             d_head_dim = key.size(dim=2)                                  # encoder = 16        decoder = 16       cross = 16
             root_d_head_dim = math.sqrt(d_head_dim)                            # encoder = 4        decoder = 4        cross = 4
-            scale = product_across_heads / root_d_head_dim      # attention score    # encoder = 16, 16, 16       decoder = 16, 19, 19   # cross = 16, 19, 16
+            scale = product_across_heads / root_d_head_dim      # attention score    # encoder = 16, 16, 16       decoder = 16, 18, 18   # cross = 16, 18, 16
             return scale 
 
         def attention_mask(attention_mask, seq_length):
-            attention_mask[attention_mask == 0] = -1000                                            # encoder = 2 * 16            # cross = 2 * 19
-            attention_mask[attention_mask == 1] = 0                                                # encoder = 2 * 16            # cross = 2 * 19
-            attention_mask = attention_mask.unsqueeze(1)                                           # encoder = 2 * 1 * 16        # cross = 2 * 1 * 19
-            attention_mask = attention_mask.repeat_interleave(repeats=num_heads, dim=1)            # encoder = 2 * 8 * 16        # cross = 2 * 8 * 19
-            attention_mask = attention_mask.reshape(BATCH_SIZE * num_heads, seq_length)            # encoder = 16 * 16           # cross = 16 * 19
+            attention_mask[attention_mask == 0] = -1000                                            # encoder = 2 * 16            # cross = 2 * 18
+            attention_mask[attention_mask == 1] = 0                                                # encoder = 2 * 16            # cross = 2 * 18
+            attention_mask = attention_mask.unsqueeze(1)                                           # encoder = 2 * 1 * 16        # cross = 2 * 1 * 18
+            attention_mask = attention_mask.repeat_interleave(repeats=num_heads, dim=1)            # encoder = 2 * 8 * 16        # cross = 2 * 8 * 18
+            attention_mask = attention_mask.reshape(BATCH_SIZE * num_heads, seq_length)            # encoder = 16 * 16           # cross = 16 * 18
             return attention_mask 
 
         def decoder_attention_mask():
-            decoder_attention_mask_1 = token_attention_masks_target.clone()                                    # cross = 2 * 19
-            decoder_attention_mask_1 = decoder_attention_mask_1.unsqueeze(1)                                           # shape = 2 * 1 * 19
-            decoder_attention_mask_1 = decoder_attention_mask_1.repeat_interleave(repeats=seq_length, dim=1)           # shape = 2 * 19 * 19
+            decoder_attention_mask_1 = token_attention_masks_target.clone()                                    # cross = 2 * 18
+            decoder_attention_mask_1 = decoder_attention_mask_1.unsqueeze(1)                                           # shape = 2 * 1 * 18
+            decoder_attention_mask_1 = decoder_attention_mask_1.repeat_interleave(repeats=seq_length, dim=1)           # shape = 2 * 18 * 18
 
             decoder_attention_mask_2 = torch.ones_like(decoder_attention_mask_1) * (-1000)
-            decoder_attention_mask_2 = torch.triu(decoder_attention_mask_2, diagonal=1)                           # masked = 2, 19, 19
+            decoder_attention_mask_2 = torch.triu(decoder_attention_mask_2, diagonal=1)                           # masked = 2, 18, 18
 
-            decoder_attention_mask = decoder_attention_mask_2.repeat_interleave(repeats=num_heads, dim=0)           # shape = 16 * 19 * 19
+            decoder_attention_mask = decoder_attention_mask_2.repeat_interleave(repeats=num_heads, dim=0)           # shape = 16 * 18 * 18
             return decoder_attention_mask
 
         def softmax_sum_prob(attention_score, seq_length, value):
-            attention_probabilty_across_heads = self.softmax(attention_score)            # encoder = 16, 16, 16       decoder = 16, 19, 19    cross = 16, 19, 16
-            prob_by_value_and_sum = torch.bmm(attention_probabilty_across_heads, value)   # encoder = 16, 16, 16    decoder = 16, 19, 19    cross = 16, 19, 16
+            attention_probabilty_across_heads = self.softmax(attention_score)            # encoder = 16, 16, 16       decoder = 16, 18, 18    cross = 16, 18, 16
+            prob_by_value_and_sum = torch.bmm(attention_probabilty_across_heads, value)   # encoder = 16, 16, 16    decoder = 16, 18, 18    cross = 16, 18, 16
             prob_by_value_and_sum = torch.reshape(prob_by_value_and_sum, (BATCH_SIZE, num_heads, seq_length, head_dim))
-            attention_output = torch.transpose(prob_by_value_and_sum , 1, 2)        # encoder = 2, 16, 8, 16    decoder = 2, 19, 8, 16   cross = 2, 19, 8, 16
-            attention_output = torch.transpose(attention_output, 2, 3)              # encoder = 2, 16, 16, 8    decoder = 2, 19, 16, 8   cross = 2, 19, 16, 8 
-            attention_output = torch.reshape(attention_output, (BATCH_SIZE, seq_length, head_dim * num_heads))    # encoder = 2, 16, 128   decoder =  2, 19, 128  cross = 2, 19, 128 
+            attention_output = torch.transpose(prob_by_value_and_sum , 1, 2)        # encoder = 2, 16, 8, 16    decoder = 2, 18, 8, 16   cross = 2, 18, 8, 16
+            attention_output = torch.transpose(attention_output, 2, 3)              # encoder = 2, 16, 16, 8    decoder = 2, 18, 16, 8   cross = 2, 18, 16, 8 
+            attention_output = torch.reshape(attention_output, (BATCH_SIZE, seq_length, head_dim * num_heads))    # encoder = 2, 16, 128   decoder =  2, 18, 128  cross = 2, 18, 128 
             return attention_output
 
 
@@ -109,7 +110,7 @@ class Attention_layer(nn.Module):
 
             scaled_product = scaled_product(decoder_query, decoder_key)
 
-            attention_score = scaled_product  + decoder_attention_mask()                                   # decoder = 16, 19, 19 
+            attention_score = scaled_product  + decoder_attention_mask()                                   # decoder = 16, 18, 18 
             attention_output = softmax_sum_prob(attention_score, seq_length, decoder_value) 
 
 
@@ -123,9 +124,9 @@ class Attention_layer(nn.Module):
 
             scaled_product = scaled_product(cross_query, cross_key)
 
-            cross_attention_mask = token_attention_masks_target.clone()                                       # cross = 2 * 19
+            cross_attention_mask = token_attention_masks_target.clone()                                       # cross = 2 * 18
             cross_attention_mask = attention_mask(cross_attention_mask, seq_length_target)
-            cross_attention_mask = cross_attention_mask.unsqueeze(2)                                          # cross = 16 * 19 * 1
+            cross_attention_mask = cross_attention_mask.unsqueeze(2)                                          # cross = 16 * 18 * 1
             attention_score = scaled_product + cross_attention_mask                                         # cross = 16, 16, 16 
             attention_output = softmax_sum_prob(attention_score, seq_length_target, cross_value) 
 
@@ -218,73 +219,82 @@ class Decoder_transformer_layer(nn.Module):
 
     def forward(self, input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding):
         
-        masked_self_attention_output = self.masked_self_attention(input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=None, attention_type='decoder')                            # decoder = 2 * 19 * 128
-        linear_layer_1 = self.linear_1(masked_self_attention_output)           # decoder = 2 * 19 * 128
-        residual_output_1 = linear_layer_1 + input_embeddings_target           # decoder = 2 * 19 * 128
+        masked_self_attention_output = self.masked_self_attention(input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=None, attention_type='decoder')                            # decoder = 2 * 18 * 128
+        linear_layer_1 = self.linear_1(masked_self_attention_output)           # decoder = 2 * 18 * 128
+        residual_output_1 = linear_layer_1 + input_embeddings_target           # decoder = 2 * 18 * 128
 
-        cross_attention_output = self.cross_attention(residual_output_1, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, attention_type='cross')   # decoder = 2 * 19 * 128
-        linear_layer_2 = self.linear_2(cross_attention_output)            # decoder = 2 * 19 * 128
-        residual_output_2 = linear_layer_2 + residual_output_1            # decoder = 2 * 19 * 128
+        cross_attention_output = self.cross_attention(residual_output_1, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding=encoder_output_embedding, attention_type='cross')   # decoder = 2 * 18 * 128
+        linear_layer_2 = self.linear_2(cross_attention_output)            # decoder = 2 * 18 * 128
+        residual_output_2 = linear_layer_2 + residual_output_1            # decoder = 2 * 18 * 128
 
-        layer_norm_output = self.layer_norm(residual_output_2)            # decoder = 2 * 19 * 128 
-        linear_layer_3 = self.linear_3(layer_norm_output)                 # decoder = 2 * 19 * 128
-        relu_output = self.relu(linear_layer_3)                           # decoder = 2 * 19 * 128
-        linear_layer_4 = self.linear_4(relu_output)                       # shape = 2 * 19 * 128
-        residual_output_3 = linear_layer_4 + residual_output_2            # shape = 2 * 19 * 128
+        layer_norm_output = self.layer_norm(residual_output_2)            # decoder = 2 * 18 * 128 
+        linear_layer_3 = self.linear_3(layer_norm_output)                 # decoder = 2 * 18 * 128
+        relu_output = self.relu(linear_layer_3)                           # decoder = 2 * 18 * 128
+        linear_layer_4 = self.linear_4(relu_output)                       # shape = 2 * 18 * 128
+        residual_output_3 = linear_layer_4 + residual_output_2            # shape = 2 * 18 * 128
 
         return residual_output_3
 
 ''' --------------------------------------------------------Main Model----------------------------------------------------------------------------------'''
 
 class Model(nn.Module):
-    def __init__(self, num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target):
+    def __init__(self, num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target):
         super().__init__()
         self.input_embed_source = Input_embedding(vocab_size_source, max_seq_length_source)
         self.input_embed_target = Input_embedding(vocab_size_target, max_seq_length_target)
         self.num_layers = num_layers
         self.lookup_table = nn.Embedding(vocab_size_target, EMBEDDING_DIM)
-        # self.dot_product = 0
+        # vocab_target_values = torch.LongTensor([i for i in vocab_target.values()])
         self.softmax = nn.Softmax(dim=2)
+        self.vocab_target = vocab_target
+        self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.encoder_layers = []
+        self.encoder_layers = nn.ModuleList()
         for _ in range(num_layers):
             self.encoder_layers.append(Encoder_transformer_layer(num_layers))
 
-        self.decoder_layers = []
+        self.decoder_layers = nn.ModuleList()
         for _ in range(num_layers):
             self.decoder_layers.append(Decoder_transformer_layer(num_layers))
   
          
-    def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, vocab_target):
+    def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=True):
         input_embeddings_source = self.input_embed_source(token_input_ids_source)
-        input_embeddings_target = self.input_embed_target(token_input_ids_target)
+        input_embeddings_target = self.input_embed_target(token_input_ids_target[:,:-1])
+        token_attention_masks_target_without_end = token_attention_masks_target[:,:-1]
 
 
         for n in range(self.num_layers):
-            encoder_output = self.encoder_layers[n](input_embeddings_source, token_attention_masks_source, token_attention_masks_target)
+            encoder_output = self.encoder_layers[n](input_embeddings_source, token_attention_masks_source, token_attention_masks_target_without_end)
             input_embeddings_source = encoder_output
 
         for n in range(self.num_layers): 
-            decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output)
+            decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source, token_attention_masks_target_without_end, encoder_output)
             input_embeddings_target = decoder_output
 
+        # print(decoder_output.shape)          # ([2, 18, 128])
+
+                                                               
+        look_up_table = self.lookup_table.weight.transpose(0, 1)          # ([250002, 128]) ---> ([128, 250002])
+        dot_product = torch.matmul(decoder_output, look_up_table)         # ([2, 18, 250002])
+
+        # This will be used during inference
+        if is_training==True:
+            index_highest_prob = None
+            ground_truth = token_input_ids_target[:,1:].reshape(-1)
+            loss = self.loss(dot_product.view(-1, dot_product.shape[2]), ground_truth)
+            seq_len_target = token_input_ids_target[:,:-1].shape[1]
+            loss = loss.view(-1, seq_len_target)
+            loss = loss * token_attention_masks_target_without_end
+            loss = torch.sum(loss)/torch.sum(token_attention_masks_target_without_end)
+        else:
+            loss = None
+            softmax = self.softmax(dot_product)                                        # ([2, 18, 250002])
+            index_highest_prob = torch.argmax(softmax, dim=2)
         
-        print(decoder_output)
-        print(decoder_output.shape)          # ([2, 19, 128])
-
-        vocab_target_values = torch.LongTensor([i for i in vocab_target.values()])     
-        decoder_output = decoder_output                                                           
-        look_up_table = self.lookup_table(vocab_target_values).unsqueeze(0).transpose(1, 2)          # ([250002, 128]) ---> ([128, 250002, 1])
-        dot_product = torch.matmul(decoder_output, look_up_table)
-        softmax = self.softmax(dot_product)                                        # ([2, 19, 250002])
-
-        index_highest_prob = torch.argmax(softmax, dim=2)
-
-        
-        return decoder_output
+        return index_highest_prob, loss
 
 ''' ----------------------------------------------------------Training----------------------------------------------------------------------------------'''
-
 
 ''' ----------------------------------------------------------Testing-----------------------------------------------------------------------------------'''
 
@@ -308,7 +318,7 @@ def main():
     max_seq_length_source  = 512
 
     # Target Sequence
-    target_context_1 = "ስሜ ቤቴል ነው። ዲርኮሽ መብላት እወዳለሁ።"
+    target_context_1 = "ስሜ ቤቴል ነው። ዲርኮሽ እወዳለሁ።"
     target_context_2 = "ኦባማ የአሜሪካ ፕሬዝዳንት ናቸው። ከዚያ ትራምፕ የድሮው የአሜሪካ ፕሬዝዳንት ናቸው።"
     target_contexts = [target_context_1, target_context_2]
 
@@ -325,12 +335,18 @@ def main():
 
     max_seq_length_target  = 512
 
-    num_layers = 6
-    my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target)
-    model = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, vocab_target)
+    num_layers = 2
+    my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target)
+    optimizer = torch.optim.Adam(my_model.parameters(), lr = 0.00001)     # select the optimizer
 
-    # seq_length_target = len(token_input_ids_target[0])
-   
+    for epoch in tqdm(range(100)):
+        predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target)
+        loss.backward()
+        print(loss)
+        optimizer.step()
+        optimizer.zero_grad
+
+
     print()
 
 if __name__ == "__main__":
