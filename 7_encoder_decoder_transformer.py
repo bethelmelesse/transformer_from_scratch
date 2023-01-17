@@ -242,6 +242,9 @@ class Model(nn.Module):
         self.input_embed_source = Input_embedding(vocab_size_source, max_seq_length_source)
         self.input_embed_target = Input_embedding(vocab_size_target, max_seq_length_target)
         self.num_layers = num_layers
+        self.lookup_table = nn.Embedding(vocab_size_target, EMBEDDING_DIM)
+        # self.dot_product = 0
+        self.softmax = nn.Softmax(dim=2)
 
         self.encoder_layers = []
         for _ in range(num_layers):
@@ -252,7 +255,7 @@ class Model(nn.Module):
             self.decoder_layers.append(Decoder_transformer_layer(num_layers))
   
          
-    def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target):
+    def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, vocab_target):
         input_embeddings_source = self.input_embed_source(token_input_ids_source)
         input_embeddings_target = self.input_embed_target(token_input_ids_target)
 
@@ -265,23 +268,22 @@ class Model(nn.Module):
             decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source, token_attention_masks_target, encoder_output)
             input_embeddings_target = decoder_output
 
+        
+        print(decoder_output)
+        print(decoder_output.shape)          # ([2, 19, 128])
 
+        vocab_target_values = torch.LongTensor([i for i in vocab_target.values()])     
+        decoder_output = decoder_output                                                           
+        look_up_table = self.lookup_table(vocab_target_values).unsqueeze(0).transpose(1, 2)          # ([250002, 128]) ---> ([128, 250002, 1])
+        dot_product = torch.matmul(decoder_output, look_up_table)
+        softmax = self.softmax(dot_product)                                        # ([2, 19, 250002])
+
+        index_highest_prob = torch.argmax(softmax, dim=2)
+
+        
         return decoder_output
 
 ''' ----------------------------------------------------------Training----------------------------------------------------------------------------------'''
-# class Model_2(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-
-#     def forward(self, x):
-
-# loss = nn.CrossEntropyLoss()
-# optimizer = torch.optim.Adam()
-    
-# def train():
-#     optimizer.zero_grad()  
-#     predict_y = model
-#     loss = 
 
 
 ''' ----------------------------------------------------------Testing-----------------------------------------------------------------------------------'''
@@ -315,6 +317,8 @@ def main():
     vocab_size_target = tokenizer_target.vocab_size
     tokenized_target = tokenizer_target(target_contexts, padding=True)
 
+    vocab_target = tokenizer_target.vocab
+
     # token_input_ids - source 
     token_input_ids_target = torch.LongTensor(tokenized_target["input_ids"])
     token_attention_masks_target = torch.LongTensor(tokenized_target["attention_mask"])
@@ -323,7 +327,7 @@ def main():
 
     num_layers = 6
     my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target)
-    model = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target)
+    model = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, vocab_target)
 
     # seq_length_target = len(token_input_ids_target[0])
    
