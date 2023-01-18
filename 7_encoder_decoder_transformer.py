@@ -4,6 +4,7 @@ import torch.nn as nn
 import math
 from tqdm import tqdm
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # common
 BATCH_SIZE = 2
 EMBEDDING_DIM = 128
@@ -14,9 +15,9 @@ class Attention_layer(nn.Module):
     def __init__(self):
         super().__init__()
         # task 1: Intitialize w for query, key and value
-        self.w_query = torch.rand(EMBEDDING_DIM, EMBEDDING_DIM)        # shape of w = (128 * 128)
-        self.w_key = torch.rand(EMBEDDING_DIM, EMBEDDING_DIM) 
-        self.w_value = torch.rand(EMBEDDING_DIM, EMBEDDING_DIM)
+        self.w_query = nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM))      # shape of w = (128 * 128)
+        self.w_key = nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM)) 
+        self.w_value = nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM))
 
         self.num_heads = 8
         self.softmax = nn.Softmax(dim=2)
@@ -140,7 +141,7 @@ class Positional_embed(nn.Module):
         self.posit_embedding = nn.Embedding(max_seq_length, EMBEDDING_DIM)
         
     def forward(self, seq_length):
-        posit_embed_init = torch.arange(0, seq_length)
+        posit_embed_init = torch.arange(0, seq_length).to(device=device)
         positional_embeddings = self.posit_embedding(posit_embed_init).unsqueeze(0)
         return positional_embeddings       # shape = 1 * 16 * 128
 
@@ -312,8 +313,8 @@ def main():
     tokenized_source = tokenizer_source(source_contexts, padding=True)
 
     # token_input_ids - source 
-    token_input_ids_source = torch.LongTensor(tokenized_source["input_ids"])
-    token_attention_masks_source = torch.LongTensor(tokenized_source["attention_mask"])
+    token_input_ids_source = torch.LongTensor(tokenized_source["input_ids"]).to(device=device)
+    token_attention_masks_source = torch.LongTensor(tokenized_source["attention_mask"]).to(device=device)
 
     max_seq_length_source  = 512
 
@@ -330,19 +331,19 @@ def main():
     vocab_target = tokenizer_target.vocab
 
     # token_input_ids - source 
-    token_input_ids_target = torch.LongTensor(tokenized_target["input_ids"])
-    token_attention_masks_target = torch.LongTensor(tokenized_target["attention_mask"])
+    token_input_ids_target = torch.LongTensor(tokenized_target["input_ids"]).to(device=device)
+    token_attention_masks_target = torch.LongTensor(tokenized_target["attention_mask"]).to(device=device)
 
     max_seq_length_target  = 512
 
     num_layers = 2
-    my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target)
+    my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target).to(device=device)
     optimizer = torch.optim.Adam(my_model.parameters(), lr = 0.00001)     # select the optimizer
 
     for epoch in tqdm(range(100)):
         predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target)
         loss.backward()
-        print(loss)
+        print(loss.item())
         optimizer.step()
         optimizer.zero_grad
 
