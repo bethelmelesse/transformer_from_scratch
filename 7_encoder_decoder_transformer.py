@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import math
 from tqdm import tqdm
+import numpy as np
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # common
@@ -290,10 +291,11 @@ class Model(nn.Module):
             loss = torch.sum(loss)/torch.sum(token_attention_masks_target_without_end)
         else:
             loss = None
+            ground_truth = None
             softmax = self.softmax(dot_product)                                        # ([2, 18, 250002])
             index_highest_prob = torch.argmax(softmax, dim=2)
         
-        return index_highest_prob, loss
+        return ground_truth, index_highest_prob, loss
 
 ''' ----------------------------------------------------------Training----------------------------------------------------------------------------------'''
 
@@ -302,53 +304,105 @@ class Model(nn.Module):
 ''' -----------------------------------------------------------test-------------------------------------------------------------------------------------'''
 def main():
 
-    # Source Sequence
-    source_context_1 ="My name is Bethel. I like to eat dirkosh."
-    source_context_2 = "Obama is the US president. Then Trump is the old US president."
-    source_contexts = [source_context_1, source_context_2]
+    def dataset_source_tokenizer(source_contexts):
+        # Tokenizer - source
+        tokenizer_source = BertTokenizer.from_pretrained('bert-base-cased')
+        vocab_size_source = tokenizer_source.vocab_size
+        tokenized_source = tokenizer_source(source_contexts, padding=True)
+        return vocab_size_source, tokenized_source
 
-    # Tokenizer - source
-    tokenizer_source = BertTokenizer.from_pretrained('bert-base-cased')
-    vocab_size_source = tokenizer_source.vocab_size
-    tokenized_source = tokenizer_source(source_contexts, padding=True)
+    
+    def dataset_target_tokenizer(target_contexts):
+        # Tokenizer - target
+        tokenizer_target = AutoTokenizer.from_pretrained('xlm-roberta-base')
+        vocab_size_target = tokenizer_target.vocab_size
+        tokenized_target = tokenizer_target(target_contexts, padding=True)
+        vocab_target = tokenizer_target.vocab
+        return vocab_size_target, tokenized_target, vocab_target
 
-    # token_input_ids - source 
-    token_input_ids_source = torch.LongTensor(tokenized_source["input_ids"]).to(device=device)
-    token_attention_masks_source = torch.LongTensor(tokenized_source["attention_mask"]).to(device=device)
+    def dataset_token_input_ids(tokenized):
+        token_input_ids = torch.LongTensor(tokenized["input_ids"]).to(device=device)
+        token_attention_masks = torch.LongTensor(tokenized["attention_mask"]).to(device=device)
+        return token_input_ids, token_attention_masks
 
+    def source_dataset():
+        # Source Sequence
+        source_context_1 ="My name is Bethel. I like to eat dirkosh."
+        source_context_2 = "Obama is the US president. Then Trump is the old US president."
+        source_contexts = [source_context_1, source_context_2]
+        # Tokenizer - source
+        vocab_size_source, tokenized_source = dataset_source_tokenizer(source_contexts)
+        # token_input_ids - source 
+        token_input_ids_source, token_attention_masks_source = dataset_token_input_ids(tokenized_source)
+        return vocab_size_source, token_input_ids_source, token_attention_masks_source
+        
+
+    def target_dataset():
+        # Target Sequence
+        target_context_1 = "ስሜ ቤቴል ነው። ዲርኮሽ እወዳለሁ።"
+        target_context_2 = "ኦባማ የአሜሪካ ፕሬዝዳንት ናቸው። ከዚያ ትራምፕ የድሮው የአሜሪካ ፕሬዝዳንት ናቸው።"
+        target_contexts = [target_context_1, target_context_2]
+        # Tokenizer - target
+        vocab_size_target, tokenized_target, vocab_target = dataset_target_tokenizer(target_contexts)
+        # token_input_ids - target
+        token_input_ids_target, token_attention_masks_target = dataset_token_input_ids(tokenized_target)
+        return vocab_size_target, token_input_ids_target, token_attention_masks_target, vocab_target
+
+    vocab_size_source, token_input_ids_source, token_attention_masks_source = source_dataset()
+    vocab_size_target, token_input_ids_target, token_attention_masks_target, vocab_target = target_dataset()
+   
     max_seq_length_source  = 512
-
-    # Target Sequence
-    target_context_1 = "ስሜ ቤቴል ነው። ዲርኮሽ እወዳለሁ።"
-    target_context_2 = "ኦባማ የአሜሪካ ፕሬዝዳንት ናቸው። ከዚያ ትራምፕ የድሮው የአሜሪካ ፕሬዝዳንት ናቸው።"
-    target_contexts = [target_context_1, target_context_2]
-
-    # Tokenizer - target
-    tokenizer_target = AutoTokenizer.from_pretrained('xlm-roberta-base')
-    vocab_size_target = tokenizer_target.vocab_size
-    tokenized_target = tokenizer_target(target_contexts, padding=True)
-
-    vocab_target = tokenizer_target.vocab
-
-    # token_input_ids - source 
-    token_input_ids_target = torch.LongTensor(tokenized_target["input_ids"]).to(device=device)
-    token_attention_masks_target = torch.LongTensor(tokenized_target["attention_mask"]).to(device=device)
-
     max_seq_length_target  = 512
 
     num_layers = 2
     my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target).to(device=device)
     optimizer = torch.optim.Adam(my_model.parameters(), lr = 0.00001)     # select the optimizer
+    epoches = 100
 
-    for epoch in tqdm(range(100)):
-        predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target)
-        loss.backward()
-        print(loss.item())
-        optimizer.step()
-        optimizer.zero_grad
+    # def accuracy(predicted, ground_truth):
+    #     predicted = predicted.cpu().detach().numpy()
+    #     for i in range(len(predicted)):
+    #         if predicted[i] >= 0.5:
+    #             predicted[i] = 1
+    #         else:
+    #             predicted[i] = 0
+        
+    #     correct = predicted - ground_truth.cpu().detach().numpy()
+    #     correct_freq = np.count_nonzero(correct==0)
+    #     total_freq = len(correct)
+
+    #     accuracy_value = (correct_freq / total_freq) * 100
+    #     return accuracy_value
+
+    def train():
+        for epoch in tqdm(range(epoches)):
+            ground_truth, predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=True)
+            loss.backward()
+            print(loss.item())
+            optimizer.step()
+            optimizer.zero_grad                
+            
+
+    def test():
+        my_model.eval()
+        with torch.no_grad():
+            ground_truth, predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=False)
+        print(predicted)
+        predicted = predicted.tolist()
+        print(predicted)
+
+        vocab_target_list = []
+        for key in vocab_target.keys():
+            vocab_target_list.append(key)
+
+        # print(vocab_target_list)
 
 
+    # train()
+    # test()
+    # test()
     print()
 
 if __name__ == "__main__":
     main()
+ 
