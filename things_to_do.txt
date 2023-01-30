@@ -1,9 +1,5 @@
-for i in range(self.num_heads):                              # shape = 8 * [2 * 16 * 16]
-2 * 16 * 128 ->  2 * 16 * 16 * 8
-Transpose to 2 * 8 * 16 * 16
+4. Initialize all your Ws with torch nn xavier
 
-2 * 8 * 16 * 16 -> 16 * 16 * 16
+5. Add l2 loss as regularization
 
-Then opposite of these
-
-Do multi head. No for loops, lots of views and reshapes and concat/stack
+6. Add an evaluation metric (BLUE-4 or ROUGE-L). Dont implement yourself. use some library. Hint - Ask me for which library.

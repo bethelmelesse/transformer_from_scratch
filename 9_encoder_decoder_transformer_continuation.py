@@ -4,11 +4,15 @@ import torch.nn as nn
 import math
 from tqdm import tqdm
 import numpy as np
+import dload
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # common
 BATCH_SIZE = 2
 EMBEDDING_DIM = 128
+SOURCE_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.en'
+TARGET_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.am'
+
 
 ''' ------------------------------------------------------Attention----------------------------------------------------------------------------------'''
 
@@ -20,7 +24,7 @@ class Attention_layer(nn.Module):
         self.w_key = nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM)) 
         self.w_value = nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM))
 
-        self.num_heads = 8
+        self.num_heads = 1
         self.softmax = nn.Softmax(dim=2)
     
     def forward(self, input_embeddings, token_attention_masks_source, token_attention_masks_target, encoder_output_embedding, attention_type):      # x = 2, 16, 128  
@@ -101,7 +105,7 @@ class Attention_layer(nn.Module):
             scaled_product = scaled_product(encoder_query, encoder_key)
 
             encoder_attention_mask = token_attention_masks_source.clone()
-            attention_score = scaled_product + attention_mask(encoder_attention_mask, seq_length)            # encoder = 16, 16, 16
+            attention_score = scaled_product + attention_mask(encoder_attention_mask, seq_length).unsqueeze(-1)            # encoder = 16, 16, 16
             attention_output = softmax_sum_prob(attention_score, seq_length, encoder_value) 
 
         elif (attention_type == 'decoder'):
@@ -297,110 +301,103 @@ class Model(nn.Module):
         
         return ground_truth, index_highest_prob, loss
 
-''' ----------------------------------------------------------Training----------------------------------------------------------------------------------'''
 
-''' ----------------------------------------------------------Testing-----------------------------------------------------------------------------------'''
+def open_datasets(context_path):
+    with open(context_path, encoding='utf8') as f:
+        contexts = [source_context.strip() for  source_context in f.readlines()][:10]
+    return contexts
 
-''' -----------------------------------------------------------test-------------------------------------------------------------------------------------'''
-def main():
+def tokenize_dataset(sets, tokenizer):
+    tokenized = tokenizer(sets, padding=True)
+    token_input_ids = torch.LongTensor(tokenized["input_ids"]).to(device=device)
+    token_attention_masks = torch.LongTensor(tokenized["attention_mask"]).to(device=device)
+    return token_input_ids, token_attention_masks
 
-    def dataset_source_tokenizer(source_contexts):
-        # Tokenizer - source
-        tokenizer_source = BertTokenizer.from_pretrained('bert-base-cased')
-        vocab_size_source = tokenizer_source.vocab_size
-        tokenized_source = tokenizer_source(source_contexts, padding=True)
-        return vocab_size_source, tokenized_source
+def train_and_test_split():
+    source_contexts = open_datasets(SOURCE_CONTEXT_PATH)
+    target_contexts = open_datasets(TARGET_CONTEXT_PATH)
 
+    train_ratio = 0.8
+    end = int(len(source_contexts) * train_ratio)
     
-    def dataset_target_tokenizer(target_contexts):
-        # Tokenizer - target
-        tokenizer_target = AutoTokenizer.from_pretrained('xlm-roberta-base')
-        vocab_size_target = tokenizer_target.vocab_size
-        tokenized_target = tokenizer_target(target_contexts, padding=True)
-        vocab_target = tokenizer_target.vocab
-        return vocab_size_target, tokenized_target, vocab_target
+    train_set_source = source_contexts[:end]
+    test_set_source =  source_contexts[end:]
 
-    def dataset_token_input_ids(tokenized):
-        token_input_ids = torch.LongTensor(tokenized["input_ids"]).to(device=device)
-        token_attention_masks = torch.LongTensor(tokenized["attention_mask"]).to(device=device)
-        return token_input_ids, token_attention_masks
+    train_set_target = target_contexts[:end]
+    test_set_target = target_contexts[end:]
 
-    def source_dataset():
-        # Source Sequence
-        source_context_1 ="My name is Bethel. I like to eat dirkosh."
-        source_context_2 = "Obama is the US president. Then Trump is the old US president."
-        source_contexts = [source_context_1, source_context_2]
-        # Tokenizer - source
-        vocab_size_source, tokenized_source = dataset_source_tokenizer(source_contexts)
-        # token_input_ids - source 
-        token_input_ids_source, token_attention_masks_source = dataset_token_input_ids(tokenized_source)
-        return vocab_size_source, token_input_ids_source, token_attention_masks_source
-        
+    return train_set_source, train_set_target, test_set_source, test_set_target
 
-    def target_dataset():
-        # Target Sequence
-        target_context_1 = "ስሜ ቤቴል ነው። ዲርኮሽ እወዳለሁ።"
-        target_context_2 = "ኦባማ የአሜሪካ ፕሬዝዳንት ናቸው። ከዚያ ትራምፕ የድሮው የአሜሪካ ፕሬዝዳንት ናቸው።"
-        target_contexts = [target_context_1, target_context_2]
-        # Tokenizer - target
-        vocab_size_target, tokenized_target, vocab_target = dataset_target_tokenizer(target_contexts)
-        # token_input_ids - target
-        token_input_ids_target, token_attention_masks_target = dataset_token_input_ids(tokenized_target)
-        return vocab_size_target, token_input_ids_target, token_attention_masks_target, vocab_target
 
-    vocab_size_source, token_input_ids_source, token_attention_masks_source = source_dataset()
-    vocab_size_target, token_input_ids_target, token_attention_masks_target, vocab_target = target_dataset()
-   
+def preprocess(set_source, set_target, tokenizer_source, tokenizer_target):
+    token_input_ids_source, token_attention_masks_source = tokenize_dataset(set_source, tokenizer_source)
+    token_input_ids_target, token_attention_masks_target = tokenize_dataset(set_target, tokenizer_target)
+    return token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target
+
+''' -----------------------------------------------------------main-------------------------------------------------------------------------------------'''
+def main():
+    # dataset_url = 'https://object.pouta.csc.fi/OPUS-CCAligned/v1/moses/am-en.txt.zip'
+    # dload.save_unzip(dataset_url) 
+
+    train_set_source, train_set_target, test_set_source, test_set_target = train_and_test_split()
+
+    tokenizer_source = BertTokenizer.from_pretrained('bert-base-cased')
+    vocab_size_source = tokenizer_source.vocab_size
+    tokenizer_target = AutoTokenizer.from_pretrained('xlm-roberta-base')
+    vocab_size_target = tokenizer_target.vocab_size
+    vocab_target = tokenizer_target.vocab
+
     max_seq_length_source  = 512
     max_seq_length_target  = 512
-
     num_layers = 2
     my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target).to(device=device)
     optimizer = torch.optim.Adam(my_model.parameters(), lr = 0.00001)     # select the optimizer
-    epoches = 100
-
-    # def accuracy(predicted, ground_truth):
-    #     predicted = predicted.cpu().detach().numpy()
-    #     for i in range(len(predicted)):
-    #         if predicted[i] >= 0.5:
-    #             predicted[i] = 1
-    #         else:
-    #             predicted[i] = 0
-        
-    #     correct = predicted - ground_truth.cpu().detach().numpy()
-    #     correct_freq = np.count_nonzero(correct==0)
-    #     total_freq = len(correct)
-
-    #     accuracy_value = (correct_freq / total_freq) * 100
-    #     return accuracy_value
+    epoches = 2
 
     def train():
+        token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target = preprocess(train_set_source, train_set_target, tokenizer_source, tokenizer_target)
+
+        steps = int(len(token_input_ids_source)/BATCH_SIZE)
         for epoch in tqdm(range(epoches)):
-            ground_truth, predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=True)
-            loss.backward()
-            print(loss.item())
-            optimizer.step()
-            optimizer.zero_grad                
+            start = 0
+            end = BATCH_SIZE
+            for step in range(steps): 
+                ground_truth, predicted, loss = my_model(token_input_ids_source[start:end,], token_attention_masks_source[start:end,], token_input_ids_target[start:end,], token_attention_masks_target[start:end,], is_training=True)
+                start = end
+                end = start + BATCH_SIZE
+
+                loss.backward()
+                print(loss.item())
+                optimizer.step()
+                optimizer.zero_grad           
             
 
     def test():
+        token_input_ids_source, token_attention_masks_source,token_input_ids_target, token_attention_masks_target = preprocess(test_set_source, test_set_target, tokenizer_source, tokenizer_target)
+
         my_model.eval()
+
         with torch.no_grad():
             ground_truth, predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=False)
-        print(predicted)
+
+        # print(predicted)
         predicted = predicted.tolist()
         print(predicted)
+        translated = []
+        for i in range(BATCH_SIZE):
+            # translated_tokens = tokenizer_target.convert_ids_to_tokens(predicted[i])
+            # translated.append(tokenizer_target.convert_tokens_to_string(translated_tokens))
+            translated.append(tokenizer_target.decode(predicted[i]))          
+        
 
-        vocab_target_list = []
-        for key in vocab_target.keys():
-            vocab_target_list.append(key)
+ 
 
-        # print(vocab_target_list)
+        print(translated)
+        print()
 
 
-    train()
-    # test()
-    # test()
+    # train()
+    test()
     print()
 
 if __name__ == "__main__":
