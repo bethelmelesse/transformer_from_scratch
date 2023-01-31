@@ -15,6 +15,13 @@ BATCH_SIZE = 2
 EMBEDDING_DIM = 128
 SOURCE_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.en'
 TARGET_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.am'
+
+MAX_SEQ_LENGTH_SOURCE  = 512
+MAX_SEQ_LENGTH_TARGET  = 512
+NUM_LAYERS = 2
+LR = 0.00001
+WEIGHT_DECAY=1e-5
+EPOCHES = 2
 print()
 
 ''' ------------------------------------------------------Attention----------------------------------------------------------------------------------'''
@@ -185,9 +192,8 @@ class LayerNormalization(nn.Module):
         return layer_norm
 
 class Encoder_transformer_layer(nn.Module):
-    def __init__(self, num_layers):
+    def __init__(self):
         super().__init__()
-        self.num_layers = num_layers
         self.attention = Attention_layer()                                           # step 1 - self-attention
         self.linear_1 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM)                     # step 2 - linear
         self.layer_norm_1 = LayerNormalization()                                    # step 3 - layer norm
@@ -215,9 +221,8 @@ class Encoder_transformer_layer(nn.Module):
         return layer_norm_output_2 
 
 class Decoder_transformer_layer(nn.Module):
-    def __init__(self, num_layers):
+    def __init__(self):
         super().__init__()
-        self.num_layers = num_layers
         self.masked_self_attention = Attention_layer()                               # step 1 - self-attention - masked self attention ---- make it masked
         self.linear_1 = nn.Linear(EMBEDDING_DIM, EMBEDDING_DIM)                       # step 2 - linear
 
@@ -250,11 +255,10 @@ class Decoder_transformer_layer(nn.Module):
 ''' --------------------------------------------------------Main Model----------------------------------------------------------------------------------'''
 
 class Model(nn.Module):
-    def __init__(self, num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target):
+    def __init__(self, vocab_size_source, MAX_SEQ_LENGTH_SOURCE, vocab_size_target, MAX_SEQ_LENGTH_TARGET, vocab_target):
         super().__init__()
-        self.input_embed_source = Input_embedding(vocab_size_source, max_seq_length_source)
-        self.input_embed_target = Input_embedding(vocab_size_target, max_seq_length_target)
-        self.num_layers = num_layers
+        self.input_embed_source = Input_embedding(vocab_size_source, MAX_SEQ_LENGTH_SOURCE)
+        self.input_embed_target = Input_embedding(vocab_size_target, MAX_SEQ_LENGTH_TARGET)
         self.lookup_table = nn.Embedding(vocab_size_target, EMBEDDING_DIM)
         # vocab_target_values = torch.LongTensor([i for i in vocab_target.values()])
         self.softmax = nn.Softmax(dim=2)
@@ -262,12 +266,12 @@ class Model(nn.Module):
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
         self.encoder_layers = nn.ModuleList()
-        for _ in range(num_layers):
-            self.encoder_layers.append(Encoder_transformer_layer(num_layers))
+        for _ in range(NUM_LAYERS):
+            self.encoder_layers.append(Encoder_transformer_layer())
 
         self.decoder_layers = nn.ModuleList()
-        for _ in range(num_layers):
-            self.decoder_layers.append(Decoder_transformer_layer(num_layers))
+        for _ in range(NUM_LAYERS):
+            self.decoder_layers.append(Decoder_transformer_layer())
   
          
     def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=True):
@@ -276,11 +280,11 @@ class Model(nn.Module):
         token_attention_masks_target_without_end = token_attention_masks_target[:,:-1]
 
 
-        for n in range(self.num_layers):
+        for n in range(NUM_LAYERS):
             encoder_output = self.encoder_layers[n](input_embeddings_source, token_attention_masks_source, token_attention_masks_target_without_end)
             input_embeddings_source = encoder_output
 
-        for n in range(self.num_layers): 
+        for n in range(NUM_LAYERS): 
             decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source, token_attention_masks_target_without_end, encoder_output)
             input_embeddings_target = decoder_output
 
@@ -351,21 +355,17 @@ def main():
     vocab_size_target = tokenizer_target.vocab_size
     vocab_target = tokenizer_target.vocab
 
-    max_seq_length_source  = 512
-    max_seq_length_target  = 512
-    num_layers = 2
-    my_model = Model(num_layers, vocab_size_source, max_seq_length_source, vocab_size_target, max_seq_length_target, vocab_target).to(device=device)
-    optimizer = torch.optim.Adam(my_model.parameters(), lr = 0.00001, weight_decay=1e-5)     # select the optimizer
-    epoches = 2
+    my_model = Model(vocab_size_source, MAX_SEQ_LENGTH_SOURCE, vocab_size_target, MAX_SEQ_LENGTH_TARGET, vocab_target).to(device=device)
+    optimizer = torch.optim.Adam(my_model.parameters(), lr = LR, weight_decay=WEIGHT_DECAY)     # select the optimizer
 
     def train():
         token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target = preprocess(train_set_source, train_set_target, tokenizer_source, tokenizer_target)
 
         steps = int(len(token_input_ids_source)/BATCH_SIZE)
-        for epoch in tqdm(range(epoches)):
+        for epoch in tqdm(range(EPOCHES)):
             start = 0
             end = BATCH_SIZE
-            for step in range(steps): 
+            for step in tqdm(range(steps)): 
                 predicted, loss = my_model(token_input_ids_source[start:end,], token_attention_masks_source[start:end,], token_input_ids_target[start:end,], token_attention_masks_target[start:end,], is_training=True)
                 start = end
                 end = start + BATCH_SIZE
@@ -385,7 +385,7 @@ def main():
             steps = int(len(token_input_ids_target)/BATCH_SIZE)
             start = 0
             end = BATCH_SIZE
-            for step in range(steps): 
+            for step in tqdm(range(steps)): 
                 predicted, loss = my_model(token_input_ids_source[start:end,], token_attention_masks_source[start:end,], token_input_ids_target[start:end,], token_attention_masks_target[start:end,], is_training=False)
                 start = end
                 end = start + BATCH_SIZE
