@@ -5,7 +5,6 @@ import math
 from tqdm import tqdm
 import numpy as np
 import dload
-# from torchmetrics import BLEUScore 
 import evaluate
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -308,7 +307,7 @@ class Model(nn.Module):
 
 def open_datasets(context_path):
     with open(context_path, encoding='utf8') as f:
-        contexts = [source_context.strip() for  source_context in f.readlines()][:10]
+        contexts = [source_context.strip() for  source_context in f.readlines()][:20]
     return contexts
 
 def tokenize_dataset(sets, tokenizer):
@@ -379,18 +378,24 @@ def main():
         token_input_ids_source, token_attention_masks_source,token_input_ids_target, token_attention_masks_target = preprocess(test_set_source, test_set_target, tokenizer_source, tokenizer_target)
 
         my_model.eval()
-
-        with torch.no_grad():
-            predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=False)
-
-        # print(predicted)
-        predicted = predicted.tolist()
-        # print(predicted)
         translated = []
-        for i in range(len(token_input_ids_target)):
-            # translated_tokens = tokenizer_target.convert_ids_to_tokens(predicted[i])
-            # translated.append(tokenizer_target.convert_tokens_to_string(translated_tokens))
-            translated.append(tokenizer_target.decode(predicted[i]))
+        with torch.no_grad():
+            steps = int(len(token_input_ids_target)/BATCH_SIZE)
+            start = 0
+            end = BATCH_SIZE
+            for step in range(steps): 
+                predicted, loss = my_model(token_input_ids_source[start:end,], token_attention_masks_source[start:end,], token_input_ids_target[start:end,], token_attention_masks_target[start:end,], is_training=False)
+                start = end
+                end = start + BATCH_SIZE
+                
+                # print(predicted)
+                predicted = predicted.tolist()
+                # print(predicted)
+                
+                for i in range(len(predicted)):
+                    # translated_tokens = tokenizer_target.convert_ids_to_tokens(predicted[i])
+                    # translated.append(tokenizer_target.convert_tokens_to_string(translated_tokens))
+                    translated.append(tokenizer_target.decode(predicted[i]))
         return translated 
 
 
