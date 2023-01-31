@@ -5,7 +5,8 @@ import math
 from tqdm import tqdm
 import numpy as np
 import dload
-from torchmetrics import BLEUScore 
+# from torchmetrics import BLEUScore 
+import evaluate
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # common
@@ -13,7 +14,6 @@ BATCH_SIZE = 2
 EMBEDDING_DIM = 128
 SOURCE_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.en'
 TARGET_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.am'
-W = torch.empty(EMBEDDING_DIM, EMBEDDING_DIM)
 print()
 
 ''' ------------------------------------------------------Attention----------------------------------------------------------------------------------'''
@@ -22,9 +22,12 @@ class Attention_layer(nn.Module):
     def __init__(self):
         super().__init__()
         # task 1: Intitialize w for query, key and value
-        self.w_query = nn.init.xavier_uniform_(W)     # shape of w = (128 * 128)
-        self.w_key =  nn.init.xavier_uniform_(W) 
-        self.w_value =  nn.init.xavier_uniform_(W) 
+        self.w_query = nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM))       # shape of w = (128 * 128)
+        self.w_query = torch.nn.init.xavier_normal_(self.w_query)
+        self.w_key =  nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM)) 
+        self.w_key = torch.nn.init.xavier_normal_(self.w_key)  
+        self.w_value =  nn.Parameter(torch.rand(EMBEDDING_DIM, EMBEDDING_DIM)) 
+        self.w_value = torch.nn.init.xavier_normal_(self.w_value)  
 
         self.num_heads = 1
         self.softmax = nn.Softmax(dim=2)
@@ -265,7 +268,6 @@ class Model(nn.Module):
         for _ in range(num_layers):
             self.decoder_layers.append(Decoder_transformer_layer(num_layers))
   
-        self.evaluation_metrics = BLEUScore()
          
     def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=True):
         input_embeddings_source = self.input_embed_source(token_input_ids_source)
@@ -287,26 +289,22 @@ class Model(nn.Module):
         look_up_table = self.lookup_table.weight.transpose(0, 1)          # ([250002, 128]) ---> ([128, 250002])
         dot_product = torch.matmul(decoder_output, look_up_table)         # ([2, 18, 250002])
 
+        ground_truth = token_input_ids_target[:,1:].reshape(-1)
         # This will be used during inference
         if is_training==True:
             index_highest_prob = None
-            ground_truth = token_input_ids_target[:,1:].reshape(-1)
             loss = self.loss(dot_product.view(-1, dot_product.shape[2]), ground_truth)
             seq_len_target = token_input_ids_target[:,:-1].shape[1]
             loss = loss.view(-1, seq_len_target)
             loss = loss * token_attention_masks_target_without_end
             loss = torch.sum(loss)/torch.sum(token_attention_masks_target_without_end)
-            evaluation_result = None
             
         else:
             loss = None
-            ground_truth = token_input_ids_target[:,1:].reshape(-1)
             softmax = self.softmax(dot_product)                                        # ([2, 18, 250002])
             index_highest_prob = torch.argmax(softmax, dim=2)
-            evaluation_result = self.evaluation_metrics(index_highest_prob, ground_truth)
-        
-        return ground_truth, index_highest_prob, loss, evaluation_result
-
+            
+        return index_highest_prob, loss
 
 def open_datasets(context_path):
     with open(context_path, encoding='utf8') as f:
@@ -333,7 +331,6 @@ def train_and_test_split():
     test_set_target = target_contexts[end:]
 
     return train_set_source, train_set_target, test_set_source, test_set_target
-
 
 def preprocess(set_source, set_target, tokenizer_source, tokenizer_target):
     token_input_ids_source, token_attention_masks_source = tokenize_dataset(set_source, tokenizer_source)
@@ -368,7 +365,7 @@ def main():
             start = 0
             end = BATCH_SIZE
             for step in range(steps): 
-                ground_truth, predicted, loss, evaluation_result = my_model(token_input_ids_source[start:end,], token_attention_masks_source[start:end,], token_input_ids_target[start:end,], token_attention_masks_target[start:end,], is_training=True)
+                predicted, loss = my_model(token_input_ids_source[start:end,], token_attention_masks_source[start:end,], token_input_ids_target[start:end,], token_attention_masks_target[start:end,], is_training=True)
                 start = end
                 end = start + BATCH_SIZE
 
@@ -384,29 +381,43 @@ def main():
         my_model.eval()
 
         with torch.no_grad():
-            ground_truth, predicted, loss, evaluation_result = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=False)
+            predicted, loss = my_model(token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=False)
 
         # print(predicted)
         predicted = predicted.tolist()
         # print(predicted)
         translated = []
-        for i in range(BATCH_SIZE):
+        for i in range(len(token_input_ids_target)):
             # translated_tokens = tokenizer_target.convert_ids_to_tokens(predicted[i])
             # translated.append(tokenizer_target.convert_tokens_to_string(translated_tokens))
-            translated.append(tokenizer_target.decode(predicted[i])) 
-
-        print('\33[34m' + f"TRANSLATED: {translated}" + '\033[0m')
-        print()
-
-        print('\033[91m' + f"SOURCE: {open_datasets(SOURCE_CONTEXT_PATH)}" + '\033[0m')
-        print()
-        print('\33[32m' + f"TARGET: {open_datasets(TARGET_CONTEXT_PATH)}" + '\033[0m')
-        print()
-    
+            translated.append(tokenizer_target.decode(predicted[i]))
+        return translated 
 
 
-    train()
-    test()
+    # def evaluation(preds, target):
+    #     evaluation_metrics = BLEUScore()
+    #     evaluation_result = evaluation_metrics(preds, target)
+    #     return evaluation_result
+
+    def evaluation(preds, target):
+        bleu = evaluate.load("bleu")
+        evaluation_result = bleu.compute(predictions=preds, references=target)
+        return evaluation_result
+
+    # train()
+    preds = test()
+    def extractDigits(lst):
+        return list(map(lambda el:[el], lst))
+
+    print()
+    print('\33[34m' + f"TRANSLATED: {preds}" + '\033[0m')
+    print()
+    print('\033[91m' + f"SOURCE: {test_set_source}" + '\033[0m')
+    print()
+    target = extractDigits(test_set_target)
+    print('\33[32m' + f"TARGET: {target}" + '\033[0m')
+    print() 
+    print('\33[36m' + f"Evaluation: {evaluation(preds, target)}" + '\033[0m')
     print()
 
 if __name__ == "__main__":
