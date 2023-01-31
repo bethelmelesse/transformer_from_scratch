@@ -6,7 +6,9 @@ from tqdm import tqdm
 import numpy as np
 import dload
 import evaluate
+import time 
 
+tic = time.time()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # common
 BATCH_SIZE = 2
@@ -307,7 +309,7 @@ class Model(nn.Module):
 
 def open_datasets(context_path):
     with open(context_path, encoding='utf8') as f:
-        contexts = [source_context.strip() for  source_context in f.readlines()][:20]
+        contexts = [source_context.strip() for  source_context in f.readlines()][:30]
     return contexts
 
 def tokenize_dataset(sets, tokenizer):
@@ -398,21 +400,17 @@ def main():
                     translated.append(tokenizer_target.decode(predicted[i]))
         return translated 
 
-
-    # def evaluation(preds, target):
-    #     evaluation_metrics = BLEUScore()
-    #     evaluation_result = evaluation_metrics(preds, target)
-    #     return evaluation_result
-
     def evaluation(preds, target):
         bleu = evaluate.load("bleu")
         evaluation_result = bleu.compute(predictions=preds, references=target)
         return evaluation_result
 
-    # train()
+    train()
     preds = test()
     def extractDigits(lst):
         return list(map(lambda el:[el], lst))
+
+    toc = time.time()
 
     print()
     print('\33[34m' + f"TRANSLATED: {preds}" + '\033[0m')
@@ -423,6 +421,8 @@ def main():
     print('\33[32m' + f"TARGET: {target}" + '\033[0m')
     print() 
     print('\33[36m' + f"Evaluation: {evaluation(preds, target)}" + '\033[0m')
+    print()
+    print(f"time took: {toc-tic} sec")
     print()
 
 if __name__ == "__main__":
