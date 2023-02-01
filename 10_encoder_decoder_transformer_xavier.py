@@ -36,7 +36,7 @@ def open_datasets(context_path):
     return contexts
 
 def tokenize_dataset(sets, tokenizer):
-    tokenized = tokenizer(sets, padding=True)
+    tokenized = tokenizer(sets, padding='max_length')
     token_input_ids = torch.LongTensor(tokenized["input_ids"]).to(device=device)
     token_attention_masks = torch.LongTensor(tokenized["attention_mask"]).to(device=device)
     return token_input_ids, token_attention_masks
@@ -398,33 +398,32 @@ def main():
                     # translated_tokens = TOKENIZER_TARGET.convert_ids_to_tokens(predicted[i])
                     # translated.append(TOKENIZER_TARGET.convert_tokens_to_string(translated_tokens))
                     translated.append(TOKENIZER_TARGET.decode(predicted[i]))
-        return translated 
+        
+        return translated
 
     def evaluation(preds, target):
         bleu = evaluate.load("bleu")
         evaluation_result = bleu.compute(predictions=preds, references=target)
         return evaluation_result
 
-    train()
-    preds = test()
+    
     def extractDigits(lst):
         return list(map(lambda el:[el], lst))
 
-    toc = time.time()
+    def to_print(preds, set_source, set_target):
+        print('\33[34m' + f"\nTRANSLATED: {preds}\n" + '\033[0m')
+        print('\033[91m' + f"SOURCE: {set_source}\n" + '\033[0m')
+        target = extractDigits(set_target)
+        print('\33[32m' + f"TARGET: {target}\n" + '\033[0m')
+        print('\33[36m' + f"Evaluation: {evaluation(preds, target)}\n" + '\033[0m')
+    
+    train()
+    preds_test = test()
+    to_print(preds_test, test_set_source, test_set_target)
 
-    
-    print('\33[34m' + f"TRANSLATED: {preds}\n" + '\033[0m')
-    
-    print('\033[91m' + f"SOURCE: {test_set_source}\n" + '\033[0m')
-    
-    target = extractDigits(test_set_target)
-    print('\33[32m' + f"TARGET: {target}\n" + '\033[0m')
-    
-    print('\33[36m' + f"Evaluation: {evaluation(preds, target)}\n" + '\033[0m')
-    
+    toc = time.time()
     print(f"time took: {toc-tic} sec\n")
     
-
 if __name__ == "__main__":
     main()
  
