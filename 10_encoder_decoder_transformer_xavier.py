@@ -15,19 +15,76 @@ BATCH_SIZE = 2
 EMBEDDING_DIM = 128
 SOURCE_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.en'
 TARGET_CONTEXT_PATH = './am-en.txt/CCAligned.am-en.am'
-
 TOKENIZER_SOURCE = BertTokenizer.from_pretrained('bert-base-cased')
 TOKENIZER_TARGET = AutoTokenizer.from_pretrained('xlm-roberta-base')
-
 TRAIN_RATIO = 0.8
-
 MAX_SEQ_LENGTH_SOURCE  = 512
 MAX_SEQ_LENGTH_TARGET  = 512
 NUM_LAYERS = 2
 LR = 0.00001
 WEIGHT_DECAY=1e-5
 EPOCHES = 2
+# dataset_url = 'https://object.pouta.csc.fi/OPUS-CCAligned/v1/moses/am-en.txt.zip'
+# dload.save_unzip(dataset_url) 
+EXAMPLE = 10
 print()
+
+''' --------------------------------------------------------DATASET-------------------------------------------------------------------------------------'''
+def open_datasets(context_path):
+    with open(context_path, encoding='utf8') as f:
+        contexts = [source_context.strip() for  source_context in f.readlines()][:EXAMPLE]
+    return contexts
+
+def tokenize_dataset(sets, tokenizer):
+    tokenized = tokenizer(sets, padding=True)
+    token_input_ids = torch.LongTensor(tokenized["input_ids"]).to(device=device)
+    token_attention_masks = torch.LongTensor(tokenized["attention_mask"]).to(device=device)
+    return token_input_ids, token_attention_masks
+
+def train_and_test_split():
+    source_contexts = open_datasets(SOURCE_CONTEXT_PATH)
+    target_contexts = open_datasets(TARGET_CONTEXT_PATH)
+
+    end = int(len(source_contexts) * TRAIN_RATIO)
+    
+    train_set_source = source_contexts[:end]
+    test_set_source =  source_contexts[end:]
+
+    train_set_target = target_contexts[:end]
+    test_set_target = target_contexts[end:]
+
+    return train_set_source, train_set_target, test_set_source, test_set_target
+
+def preprocess(set_source, set_target):
+    token_input_ids_source, token_attention_masks_source = tokenize_dataset(set_source, TOKENIZER_SOURCE)
+    token_input_ids_target, token_attention_masks_target = tokenize_dataset(set_target, TOKENIZER_TARGET)
+    return token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target
+
+''' ------------------------------------------------------Embeddings----------------------------------------------------------------------------------'''
+
+class Positional_embed(nn.Module):
+    def __init__(self, max_seq_length):
+        super().__init__()
+        self.posit_embedding = nn.Embedding(max_seq_length, EMBEDDING_DIM)
+        
+    def forward(self, seq_length):
+        posit_embed_init = torch.arange(0, seq_length).to(device=device)
+        positional_embeddings = self.posit_embedding(posit_embed_init).unsqueeze(0)
+        return positional_embeddings       # shape = 1 * 16 * 128
+
+class Input_embedding(nn.Module):
+    def __init__(self, vocab_size, max_seq_length):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, EMBEDDING_DIM)
+        self.posit_embed = Positional_embed(max_seq_length)
+
+    def forward(self, token_input_ids):
+        token_embeddings = self.embedding(token_input_ids)     # x = (batch_size, seq_length_source) & (batch_size, seq_length_source, embedding_dim)  (2, 16, 128)
+        seq_length = len(token_input_ids[0])
+        position_embeddings = self.posit_embed(seq_length)
+        token_embeddings_with_posit = token_embeddings + position_embeddings
+
+        return token_embeddings_with_posit
 
 ''' ------------------------------------------------------Attention----------------------------------------------------------------------------------'''
 
@@ -155,32 +212,6 @@ class Attention_layer(nn.Module):
             attention_output = softmax_sum_prob(attention_score, seq_length_target, cross_value) 
 
         return attention_output                       
-
-''' ------------------------------------------------------Embeddings----------------------------------------------------------------------------------'''
-
-class Positional_embed(nn.Module):
-    def __init__(self, max_seq_length):
-        super().__init__()
-        self.posit_embedding = nn.Embedding(max_seq_length, EMBEDDING_DIM)
-        
-    def forward(self, seq_length):
-        posit_embed_init = torch.arange(0, seq_length).to(device=device)
-        positional_embeddings = self.posit_embedding(posit_embed_init).unsqueeze(0)
-        return positional_embeddings       # shape = 1 * 16 * 128
-
-class Input_embedding(nn.Module):
-    def __init__(self, vocab_size, max_seq_length):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, EMBEDDING_DIM)
-        self.posit_embed = Positional_embed(max_seq_length)
-
-    def forward(self, token_input_ids):
-        token_embeddings = self.embedding(token_input_ids)     # x = (batch_size, seq_length_source) & (batch_size, seq_length_source, embedding_dim)  (2, 16, 128)
-        seq_length = len(token_input_ids[0])
-        position_embeddings = self.posit_embed(seq_length)
-        token_embeddings_with_posit = token_embeddings + position_embeddings
-
-        return token_embeddings_with_posit
 
 ''' ----------------------------------------------------Transformer layers-----------------------------------------------------------------------------'''
 
@@ -316,49 +347,16 @@ class Model(nn.Module):
             
         return index_highest_prob, loss
 
-def open_datasets(context_path):
-    with open(context_path, encoding='utf8') as f:
-        contexts = [source_context.strip() for  source_context in f.readlines()][:30]
-    return contexts
-
-def tokenize_dataset(sets, tokenizer):
-    tokenized = tokenizer(sets, padding=True)
-    token_input_ids = torch.LongTensor(tokenized["input_ids"]).to(device=device)
-    token_attention_masks = torch.LongTensor(tokenized["attention_mask"]).to(device=device)
-    return token_input_ids, token_attention_masks
-
-def train_and_test_split():
-    source_contexts = open_datasets(SOURCE_CONTEXT_PATH)
-    target_contexts = open_datasets(TARGET_CONTEXT_PATH)
-
-    end = int(len(source_contexts) * TRAIN_RATIO)
-    
-    train_set_source = source_contexts[:end]
-    test_set_source =  source_contexts[end:]
-
-    train_set_target = target_contexts[:end]
-    test_set_target = target_contexts[end:]
-
-    return train_set_source, train_set_target, test_set_source, test_set_target
-
-def preprocess(set_source, set_target):
-    token_input_ids_source, token_attention_masks_source = tokenize_dataset(set_source, TOKENIZER_SOURCE)
-    token_input_ids_target, token_attention_masks_target = tokenize_dataset(set_target, TOKENIZER_TARGET)
-    return token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target
-
 ''' -----------------------------------------------------------main-------------------------------------------------------------------------------------'''
 def main():
-    # dataset_url = 'https://object.pouta.csc.fi/OPUS-CCAligned/v1/moses/am-en.txt.zip'
-    # dload.save_unzip(dataset_url) 
-
     train_set_source, train_set_target, test_set_source, test_set_target = train_and_test_split()
 
-    
     vocab_size_source = TOKENIZER_SOURCE.vocab_size
     vocab_size_target = TOKENIZER_TARGET.vocab_size
     vocab_target = TOKENIZER_TARGET.vocab
 
     my_model = Model(vocab_size_source, vocab_size_target, vocab_target).to(device=device)
+
     optimizer = torch.optim.Adam(my_model.parameters(), lr = LR, weight_decay=WEIGHT_DECAY)     # select the optimizer
 
     def train():
@@ -378,7 +376,6 @@ def main():
                 optimizer.step()
                 optimizer.zero_grad           
             
-
     def test():
         token_input_ids_source, token_attention_masks_source,token_input_ids_target, token_attention_masks_target = preprocess(test_set_source, test_set_target)
 
@@ -415,18 +412,18 @@ def main():
 
     toc = time.time()
 
-    print()
-    print('\33[34m' + f"TRANSLATED: {preds}" + '\033[0m')
-    print()
-    print('\033[91m' + f"SOURCE: {test_set_source}" + '\033[0m')
-    print()
+    
+    print('\33[34m' + f"TRANSLATED: {preds}\n" + '\033[0m')
+    
+    print('\033[91m' + f"SOURCE: {test_set_source}\n" + '\033[0m')
+    
     target = extractDigits(test_set_target)
-    print('\33[32m' + f"TARGET: {target}" + '\033[0m')
-    print() 
-    print('\33[36m' + f"Evaluation: {evaluation(preds, target)}" + '\033[0m')
-    print()
-    print(f"time took: {toc-tic} sec")
-    print()
+    print('\33[32m' + f"TARGET: {target}\n" + '\033[0m')
+    
+    print('\33[36m' + f"Evaluation: {evaluation(preds, target)}\n" + '\033[0m')
+    
+    print(f"time took: {toc-tic} sec\n")
+    
 
 if __name__ == "__main__":
     main()
