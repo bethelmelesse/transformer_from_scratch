@@ -21,7 +21,6 @@ class Input_embedding(nn.Module):
         self.posit_embed = Positional_embed(max_seq_length)
 
     def forward(self, token_input_ids):
-        # x = (batch_size, seq_length_source) & (batch_size, seq_length_source, embedding_dim)  (2, 16, 128)
         token_embeddings = self.embedding(token_input_ids)
         seq_length = len(token_input_ids[0])
         position_embeddings = self.posit_embed(seq_length)

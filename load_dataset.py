@@ -10,8 +10,8 @@ def open_datasets(context_path):
     return contexts
 
 
-def tokenize_dataset(sets, tokenizer):
-    tokenized = tokenizer(sets, padding='max_length')
+def tokenize_dataset(sets, tokenizer, max_seq_length):
+    tokenized = tokenizer(sets, padding='max_length', max_length=max_seq_length, truncation=True)
     token_input_ids = torch.LongTensor(tokenized["input_ids"]).to(device=device)
     token_attention_masks = torch.LongTensor(tokenized["attention_mask"]).to(device=device)
     return token_input_ids, token_attention_masks
@@ -33,6 +33,6 @@ def train_and_test_split():
 
 
 def preprocess(set_source, set_target, tokenizer_source, tokenizer_target):
-    token_input_ids_source, token_attention_masks_source = tokenize_dataset(set_source, tokenizer_source)
-    token_input_ids_target, token_attention_masks_target = tokenize_dataset(set_target, tokenizer_target)
+    token_input_ids_source, token_attention_masks_source = tokenize_dataset(set_source, tokenizer_source, MAX_SEQ_LENGTH_SOURCE)
+    token_input_ids_target, token_attention_masks_target = tokenize_dataset(set_target, tokenizer_target, MAX_SEQ_LENGTH_TARGET)
     return token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target
