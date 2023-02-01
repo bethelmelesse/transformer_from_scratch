@@ -1,14 +1,15 @@
+import time
+
+import evaluate
+import numpy as np
 import torch
 from tqdm import tqdm
-import numpy as np
-import evaluate
-import time 
-
 from transformers import AutoTokenizer
 
 from config import *
-from load_dataset import train_and_test_split, preprocess
 from enc_dec_model import Model
+from load_dataset import preprocess, train_and_test_split
+
 
 def main():
     print()
