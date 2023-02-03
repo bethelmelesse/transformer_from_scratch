@@ -26,7 +26,7 @@ class Model(nn.Module):
         for _ in range(NUM_LAYERS):
             self.decoder_layers.append(Decoder_transformer_layer())
 
-    def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training=True):
+    def forward(self, token_input_ids_source, token_attention_masks_source, token_input_ids_target, token_attention_masks_target, is_training):
         input_embeddings_source = self.input_embed_source(token_input_ids_source)
         input_embeddings_target = self.input_embed_target(token_input_ids_target[:, :-1])
         token_attention_masks_target_without_end = token_attention_masks_target[:, :-1]
@@ -35,18 +35,23 @@ class Model(nn.Module):
             encoder_output = self.encoder_layers[n](input_embeddings_source, token_attention_masks_source, token_attention_masks_target_without_end)
             input_embeddings_source = encoder_output
 
-        for n in range(NUM_LAYERS):
-            decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source,
+        if is_training == True:
+            for n in range(NUM_LAYERS):
+                decoder_output = self.decoder_layers[n](input_embeddings_target, token_attention_masks_source,
                                                     token_attention_masks_target_without_end, encoder_output)
-            input_embeddings_target = decoder_output
+                input_embeddings_target = decoder_output
+
+        else:
+            for n in range(NUM_LAYERS):
+                for j in range(input_embeddings_target.shape[1]):
+                    decoder_output = self.decoder_layers[n](input_embeddings_target[:,:j,:], token_attention_masks_source, token_attention_masks_target_without_end[:,:j], encoder_output)
+                    input_embeddings_target = decoder_output
 
         # print(decoder_output.shape)          # ([2, 18, 128])
-
         look_up_table = self.lookup_table.weight.transpose(0, 1)          # ([250002, 128]) ---> ([128, 250002])
         dot_product = torch.matmul(decoder_output, look_up_table)         # ([2, 18, 250002])
 
         ground_truth = token_input_ids_target[:, 1:].reshape(-1)
-        # This will be used during inference
         if is_training == True:
             index_highest_prob = None
             loss = self.loss(dot_product.view(-1, dot_product.shape[2]), ground_truth)
