@@ -1,5 +1,1 @@
-4. Initialize all your Ws with torch nn xavier
 
-5. Add l2 loss as regularization
-
-6. Add an evaluation metric (BLUE-4 or ROUGE-L). Dont implement yourself. use some library. Hint - Ask me for which library.
